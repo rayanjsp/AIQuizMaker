@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { PrismaClient } = require('@prisma/client');
-
+const authRoutes = require('./src/routes/authRoutes');
 // Charger les variables d'environnement
 dotenv.config();
 
@@ -16,6 +16,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors()); // Autorise le frontend à parler au backend
 app.use(express.json()); // Permet de lire le JSON envoyé par le client
 
+
+// --- ROUTES ---
+app.use('/api/auth', authRoutes);
 // --- ROUTES DE TEST ---
 
 // 1. Route simple pour voir si le serveur tourne
