@@ -4,24 +4,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7f654453-15b5-4cee-af4c-d801bdc9f783" name="Changes" comment="Authentification backend faite, avec MAJ BDD qui fonctionne">
-      <change afterPath="$PROJECT_DIR$/client/src/assets/main.css" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/client/src/views/DashboardView.vue" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/client/src/views/HomeView.vue" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/client/src/views/LoginView.vue" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/client/src/views/RegisterView.vue" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/server/src/controllers/authMiddleware.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/server/src/controllers/quizController.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/server/src/routes/quizRoutes.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/server/src/services/aiService.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/server/test_ai.js" afterDir="false" />
+    <list default="true" id="7f654453-15b5-4cee-af4c-d801bdc9f783" name="Changes" comment="Génération quizz + Frontend (landing + register + login + dashboard)">
+      <change afterPath="$PROJECT_DIR$/server/src/services/pdfExtractor.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/server/src/services/pdfService.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/client/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/client/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/src/App.vue" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/App.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/src/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/src/router/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/router/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/app.js" beforeDir="false" afterPath="$PROJECT_DIR$/server/app.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/src/views/DashboardView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/views/DashboardView.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/package-lock.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/server/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/src/controllers/quizController.js" beforeDir="false" afterPath="$PROJECT_DIR$/server/src/controllers/quizController.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/src/routes/quizRoutes.js" beforeDir="false" afterPath="$PROJECT_DIR$/server/src/routes/quizRoutes.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/src/services/aiService.js" beforeDir="false" afterPath="$PROJECT_DIR$/server/src/services/aiService.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -98,7 +90,7 @@
       <workItem from="1763669842036" duration="1614000" />
       <workItem from="1763671888805" duration="1513000" />
       <workItem from="1763673492052" duration="409000" />
-      <workItem from="1763740040786" duration="17299000" />
+      <workItem from="1763740040786" duration="30455000" />
     </task>
     <task id="LOCAL-00001" summary="initial">
       <option name="closed" value="true" />
@@ -124,7 +116,15 @@
       <option name="project" value="LOCAL" />
       <updated>1763753133678</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Génération quizz + Frontend (landing + register + login + dashboard)">
+      <option name="closed" value="true" />
+      <created>1763904045272</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1763904045272</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -133,6 +133,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="initial" />
     <MESSAGE value="Authentification backend faite, avec MAJ BDD qui fonctionne" />
-    <option name="LAST_COMMIT_MESSAGE" value="Authentification backend faite, avec MAJ BDD qui fonctionne" />
+    <MESSAGE value="Génération quizz + Frontend (landing + register + login + dashboard)" />
+    <option name="LAST_COMMIT_MESSAGE" value="Génération quizz + Frontend (landing + register + login + dashboard)" />
   </component>
 </project>
