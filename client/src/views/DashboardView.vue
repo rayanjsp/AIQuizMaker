@@ -1,10 +1,14 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useToast } from "vue-toastification";
+
+const toast = useToast();
 
 const router = useRouter();
 const creationMode = ref('topic'); // 'topic' ou 'pdf'
 const pdfFile = ref(null);
+const newNbQuestions = ref(5);
 
 // Pour gérer le fichier sélectionné
 const handleFileUpload = (event) => {
@@ -33,6 +37,34 @@ const score = ref(0);
 const isFinished = ref(false);
 const selectedOptionId = ref(null);
 const showCorrection = ref(false);
+const detailTab = ref('infos'); // 'infos' ou 'results'
+const quizResults = ref([]); // Stocker les scores
+
+// Computed pour le lien
+const publicLink = computed(() => {
+  if(!selectedQuiz.value) return '';
+  return `${window.location.origin}/play/${selectedQuiz.value.publicId}`;
+});
+
+// Activer/Désactiver
+const togglePublic = async () => {
+  const token = getToken();
+  try {
+    const res = await fetch(`/api/quiz/${selectedQuiz.value.id}/toggle-public`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    selectedQuiz.value.isPublic = data.isPublic; // Mise à jour locale
+  } catch (e) { alert("Erreur réseau"); }
+};
+
+// Copier
+const copyLink = () => {
+  navigator.clipboard.writeText(publicLink.value);
+  toast.success("Lien copié !");
+};
+
 
 // ---------------------------------------------------------
 // LOGIQUE API & DASHBOARD
@@ -72,7 +104,7 @@ const handleCreateQuiz = async () => {
       response = await fetch('/api/quiz/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ topic: newTopic.value, difficulty: newDifficulty.value })
+        body: JSON.stringify({ topic: newTopic.value, difficulty: newDifficulty.value, nbQuestions: newNbQuestions.value })
       });
     } else {
       // MODE PDF (FormData obligatoire pour les fichiers)
@@ -82,6 +114,7 @@ const handleCreateQuiz = async () => {
       formData.append('pdf', pdfFile.value); // Le fichier
       formData.append('topic', newTopic.value); // Le nom du quiz
       formData.append('difficulty', newDifficulty.value);
+      formData.append('nbQuestions', newNbQuestions.value);
 
       response = await fetch('/api/quiz/generate-from-pdf', {
         method: 'POST',
@@ -99,7 +132,7 @@ const handleCreateQuiz = async () => {
     quizzes.value.unshift(data.quiz);
 
   } catch (error) {
-    alert("Erreur : " + error.message);
+    toast.error("Erreur : " + error.message);
   } finally {
     isCreating.value = false;
   }
@@ -119,7 +152,7 @@ const handleDeleteQuiz = async () => {
     quizzes.value = quizzes.value.filter(q => q.id !== selectedQuiz.value.id);
     showDetailModal.value = false; // On ferme la modale
   } catch (error) {
-    alert("Erreur suppression");
+    toast.error("Erreur suppression");
   }
 };
 // TÉLÉCHARGER PDF
@@ -153,15 +186,11 @@ const downloadPdf = async (isCorrection) => {
 
   } catch (e) {
     console.error(e);
-    alert("Impossible de générer le PDF. Vérifiez que le serveur tourne.");
+    toast.error("Impossible de générer le PDF. Vérifiez que le serveur tourne.");
   }
 };
 // OUVRIR LES DÉTAILS
-const openDetail = (quiz) => {
-  selectedQuiz.value = quiz;
-  showDetailModal.value = true;
-  showMenu.value = false; // On cache le menu par défaut
-};
+
 
 // LANCER LE JEU DEPUIS LES DÉTAILS
 const startFromDetail = () => {
@@ -225,6 +254,28 @@ const getOptionClass = (option) => {
 };
 
 onMounted(fetchQuizzes);
+
+
+// --- Résulat publique ---
+const fetchResults = async () => {
+  if (!selectedQuiz.value) return;
+  try {
+    const token = getToken();
+    const res = await fetch(`/api/quiz/${selectedQuiz.value.id}/results`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    quizResults.value = await res.json();
+  } catch (e) { console.error(e); }
+};
+
+// Modifier openDetail pour reset l'onglet
+const openDetail = (quiz) => {
+  selectedQuiz.value = quiz;
+  showDetailModal.value = true;
+  showMenu.value = false;
+  detailTab.value = 'infos'; // On revient sur l'onglet principal
+  quizResults.value = []; // Reset
+};
 
 // --- ÉDITION ---
 const showEditModal = ref(false);
@@ -292,7 +343,7 @@ const aiGenerateQuestion = async (index) => {
     editingQuiz.value.questions[index].options = data.options;
 
   } catch (e) {
-    alert("Erreur IA : " + e.message);
+    toast.error("Erreur IA : " + e.message);
   } finally {
     aiLoading.value = false;
   }
@@ -301,7 +352,7 @@ const aiGenerateQuestion = async (index) => {
 // LE ROBOT 🤖 : Générer les options
 const aiGenerateOptions = async (index) => {
   const qText = editingQuiz.value.questions[index].text;
-  if(!qText || qText.length < 5) return alert("Écrivez d'abord une question !");
+  if(!qText || qText.length < 5) return toast.error("Écrivez d'abord une question !");
 
   aiLoading.value = true;
   try {
@@ -314,7 +365,7 @@ const aiGenerateOptions = async (index) => {
     const data = await response.json();
     // On remplace les options
     editingQuiz.value.questions[index].options = data;
-  } catch (e) { alert("Erreur IA"); }
+  } catch (e) { toast.error("Erreur IA"); }
   finally { aiLoading.value = false; }
 };
 
@@ -333,8 +384,8 @@ const saveQuiz = async () => {
     if(index !== -1) quizzes.value[index] = editingQuiz.value;
 
     showEditModal.value = false;
-    alert("Quiz mis à jour !");
-  } catch (e) { alert("Erreur sauvegarde"); }
+    toast.success("Quiz mis à jour !");
+  } catch (e) { toast.error("Erreur sauvegarde"); }
 };
 </script>
 
@@ -432,6 +483,20 @@ const saveQuiz = async () => {
               <option value="Difficile">Difficile</option>
             </select>
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de questions</label>
+            <div class="flex items-center gap-4">
+              <input
+                  type="range"
+                  v-model.number="newNbQuestions"
+                  min="5"
+                  max="30"
+                  step="5"
+                  class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              >
+              <span class="text-blue-600 font-bold w-12 text-right">{{ newNbQuestions }}</span>
+            </div>
+          </div>
 
           <div class="flex justify-end gap-3 mt-6">
             <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Annuler</button>
@@ -491,6 +556,32 @@ const saveQuiz = async () => {
           >
             ✅ PDF de la Correction
           </button>
+        </div>
+
+        <div class="mt-6 bg-purple-50 p-4 rounded-xl border border-purple-100">
+          <div class="flex justify-between items-center mb-2">
+            <h4 class="font-bold text-purple-900 flex items-center gap-2">
+              🌍 Partage Public
+              <span v-if="selectedQuiz.isPublic" class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">Actif</span>
+              <span v-else class="bg-gray-200 text-gray-500 text-xs px-2 py-0.5 rounded-full">Inactif</span>
+            </h4>
+
+            <button
+                @click="togglePublic"
+                :class="`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${selectedQuiz.isPublic ? 'bg-green-500' : 'bg-gray-300'}`"
+            >
+              <div :class="`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${selectedQuiz.isPublic ? 'translate-x-6' : 'translate-x-0'}`"></div>
+            </button>
+          </div>
+
+          <p class="text-xs text-purple-700 mb-3">
+            {{ selectedQuiz.isPublic ? 'Le lien est accessible à tous.' : 'Activez pour obtenir un lien de partage.' }}
+          </p>
+
+          <div v-if="selectedQuiz.isPublic" class="flex gap-2">
+            <input readonly :value="publicLink" class="flex-grow text-xs bg-white border border-purple-200 rounded px-3 text-gray-600 select-all">
+            <button @click="copyLink" class="text-xs bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700">Copier</button>
+          </div>
         </div>
         <p class="text-gray-500 text-sm mb-8">
           Prêt à tester vos connaissances ? Cliquez sur jouer pour lancer la session interactive.
@@ -591,6 +682,9 @@ const saveQuiz = async () => {
           <label class="block text-sm font-bold text-gray-700 mb-2">Titre du Quiz</label>
           <input v-model="editingQuiz.title" class="w-full text-xl font-bold border-b-2 border-gray-300 focus:border-blue-600 outline-none px-2 py-1 bg-transparent" type="text">
         </div>
+
+
+
 
         <div v-for="(question, qIndex) in editingQuiz.questions" :key="qIndex" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative group">
 

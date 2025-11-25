@@ -43,26 +43,24 @@ function shuffleArray(array) {
 }
 
 // 1. GÉNÉRER UN QUIZ COMPLET
-async function generateQuiz(topic, difficulty, pdfContent = null) {
+async function generateQuiz(topic, difficulty, pdfContent = null,nbQuestions = 5) {
     try {
-        console.log(`🤖 Envoi à DeepSeek : ${topic} (${difficulty})`);
+        console.log(`🤖 Envoi à DeepSeek : ${topic} (${difficulty}) - ${nbQuestions} questions`);
 
         let userMessage = "";
+        const qCount = Math.max(5, Math.min(30, nbQuestions)); // Sécurité : borné entre 5 et 30
+
+        // On met à jour le prompt pour inclure le nombre
+        const instruction = `Génère un quiz de ${qCount} questions (Niveau ${difficulty})`;
 
         if (pdfContent) {
-            // CAS 1 : On a un PDF. On limite la taille à ~15000 caractères pour ne pas exploser l'IA
             const safeContent = pdfContent.substring(0, 15000);
-
             userMessage = `
-                Voici le contenu d'un cours :
-                """${safeContent}"""
-                
-                TÂCHE : Génère un quiz de 5 questions (Niveau ${difficulty}) basé UNIQUEMENT sur ce texte.
-                Si le texte ne suffit pas, utilise tes connaissances générales sur le sujet "${topic}".
+                Voici le contenu d'un cours : """${safeContent}"""
+                TÂCHE : ${instruction} basé UNIQUEMENT sur ce texte.
             `;
         } else {
-            // CAS 2 : Classique (Sujet uniquement)
-            userMessage = `Génère un quiz sur le sujet : ${topic} (Niveau : ${difficulty})`;
+            userMessage = `${instruction} sur le sujet : ${topic}`;
         }
 
         const completion = await client.chat.completions.create({

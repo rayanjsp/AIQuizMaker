@@ -18,24 +18,25 @@ model User {
   username  String?
   createdAt DateTime @default(now())
 
-  // Relations : Son historique
-  quizzes   Quiz[]   // Tous les quiz qu'il a générés (Ton historique est ici)
-  results   Result[] // Tous ses scores de jeu
+  quizzes   Quiz[]
+  results   Result[]
 }
 
 // --- 2. LE QUIZ ---
 model Quiz {
   id          Int      @id @default(autoincrement())
   title       String
-  topic       String   // Le sujet demandé à DeepSeek
+  topic       String
   difficulty  String
+
+  publicId    String   @unique @default(uuid())
+  isPublic    Boolean  @default(false)
+
   createdAt   DateTime @default(now())
 
-  // Lien avec l'utilisateur
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
 
-  // Contenu du quiz
   questions   Question[]
   results     Result[]
 }
@@ -69,8 +70,12 @@ model Result {
   totalQuestions Int
   completedAt    DateTime @default(now())
 
-  userId         Int
-  user           User     @relation(fields: [userId], references: [id])
+  userId         Int?
+  user           User?    @relation(fields: [userId], references: [id])
+
+  guestName      String?
+  // ---------------------
+
   quizId         Int
   quiz           Quiz     @relation(fields: [quizId], references: [id])
 }

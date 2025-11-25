@@ -6,13 +6,13 @@ const { extractTextFromPDF } = require('../services/pdfExtractor');
 
 exports.createQuiz = async (req, res) => {
     try {
-        const { topic, difficulty } = req.body;
+        const { topic, difficulty, nbQuestions } = req.body;
         // On récupère l'ID de l'utilisateur connecté (mis dans req.user par le middleware d'auth plus tard)
         // Pour l'instant, on peut simuler un ID, ou attendre d'avoir fait le middleware.
         const userId = req.user.userId;
 
         // 1. Appeler l'IA (C'est ce que tu viens de tester)
-        const quizData = await generateQuiz(topic, difficulty);
+        const quizData = await generateQuiz(topic, difficulty, null, nbQuestions);
 
         // 2. Sauvegarder tout dans la BDD avec Prisma
         // C'est ici le challenge !
@@ -208,7 +208,7 @@ exports.createQuizFromPDF = async (req, res) => {
         // Multer a mis le fichier dans req.file
         if (!req.file) return res.status(400).json({ error: "Aucun fichier envoyé" });
 
-        const { topic, difficulty } = req.body; // On reçoit aussi le titre donné par l'user
+        const { topic, difficulty, nbQuestions } = req.body;
 
         // 1. Extraire le texte du fichier
         const pdfText = await extractTextFromPDF(req.file.path);
@@ -216,7 +216,7 @@ exports.createQuizFromPDF = async (req, res) => {
         console.log("📄 Texte extrait (aperçu) :", pdfText.substring(0, 100) + "...");
 
         // 2. Appeler l'IA avec ce texte
-        const quizData = await generateQuiz(topic, difficulty, pdfText);
+        const quizData = await generateQuiz(topic, difficulty, pdfText, nbQuestions);
 
         // 3. Sauvegarder (Comme avant)
         const newQuiz = await prisma.quiz.create({
@@ -243,5 +243,101 @@ exports.createQuizFromPDF = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Erreur analyse PDF" });
+    }
+};
+
+exports.togglePublic = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const quiz = await prisma.quiz.findUnique({ where: { id: parseInt(id) } });
+
+        if (!quiz || quiz.userId !== req.user.userId) {
+            return res.status(403).json({ error: "Accès interdit" });
+        }
+
+        const updatedQuiz = await prisma.quiz.update({
+            where: { id: parseInt(id) },
+            data: { isPublic: !quiz.isPublic } // On inverse la valeur
+        });
+
+        res.json({ isPublic: updatedQuiz.isPublic, publicId: updatedQuiz.publicId });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+};
+
+exports.getPublicQuiz = async (req, res) => {
+    try {
+        const { uuid } = req.params; // On cherche par UUID, pas par ID !
+
+        const quiz = await prisma.quiz.findUnique({
+            where: { publicId: uuid },
+            include: { questions: { include: { options: true } } }
+        });
+
+        if (!quiz || !quiz.isPublic) {
+            return res.status(404).json({ error: "Ce quiz n'existe pas ou n'est plus accessible." });
+        }
+
+        // Sécurité : On peut retirer les "isCorrect" ici si on veut que le front ne puisse pas tricher
+        // Mais pour l'instant, on laisse simple.
+        res.json(quiz);
+    } catch (error) {
+        res.status(500).json({ error: "Erreur chargement quiz" });
+    }
+};
+
+exports.submitPublicScore = async (req, res) => {
+    try {
+        const { uuid } = req.params;
+        const { score, total, pseudo } = req.body;
+
+        // On retrouve l'ID interne du quiz grâce à l'UUID
+        const quiz = await prisma.quiz.findUnique({ where: { publicId: uuid } });
+
+        if (!quiz) return res.status(404).json({ error: "Quiz introuvable" });
+
+        await prisma.result.create({
+            data: {
+                quizId: quiz.id,
+                score: score,
+                totalQuestions: total,
+                guestName: pseudo || "Anonyme",
+                userId: null // C'est un invité
+            }
+        });
+
+        res.json({ message: "Score enregistré !" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Erreur sauvegarde score" });
+    }
+};
+
+// Récupérer les résultats d'un quiz spécifique
+exports.getQuizResults = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Vérif sécurité
+        const quiz = await prisma.quiz.findUnique({ where: { id: parseInt(id) } });
+        if (!quiz || quiz.userId !== req.user.userId) return res.status(403).json({ error: "Accès refusé" });
+
+        // On récupère les résultats triés par score décroissant
+        const results = await prisma.result.findMany({
+            where: { quizId: parseInt(id) },
+            orderBy: { score: 'desc' },
+            select: {
+                id: true,
+                guestName: true,
+                score: true,
+                totalQuestions: true,
+                completedAt: true
+            }
+        });
+
+        res.json(results);
+    } catch (error) {
+        res.status(500).json({ error: "Erreur récupération résultats" });
     }
 };
