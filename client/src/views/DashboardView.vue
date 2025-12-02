@@ -9,7 +9,7 @@ const router = useRouter();
 const creationMode = ref('topic'); // 'topic' ou 'pdf'
 const pdfFile = ref(null);
 const newNbQuestions = ref(5);
-
+const searchQuery = ref('');
 // Pour gérer le fichier sélectionné
 const handleFileUpload = (event) => {
   pdfFile.value = event.target.files[0];
@@ -44,6 +44,14 @@ const quizResults = ref([]); // Stocker les scores
 const publicLink = computed(() => {
   if(!selectedQuiz.value) return '';
   return `${window.location.origin}/play/${selectedQuiz.value.publicId}`;
+});
+
+// Créer une computed property pour filtrer
+const filteredQuizzes = computed(() => {
+  return quizzes.value.filter(q =>
+      q.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      q.topic.toLowerCase().includes(searchQuery.value.toLowerCase())
+  );
 });
 
 // Activer/Désactiver
@@ -402,12 +410,22 @@ const saveQuiz = async () => {
       </div>
     </nav>
 
+
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="flex justify-between items-center mb-8">
         <h2 class="text-3xl font-bold text-gray-900">Mes Quiz</h2>
         <button @click="showCreateModal = true" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-lg">
           <span>+</span> Nouveau
         </button>
+      </div>
+      <div class="mb-6 relative">
+        <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Rechercher un quiz..."
+            class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        >
+        <span class="absolute left-3 top-2.5 text-gray-400">🔍</span>
       </div>
 
       <div v-if="loading" class="text-center py-12 text-gray-500">Chargement...</div>
@@ -420,7 +438,7 @@ const saveQuiz = async () => {
 
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div
-            v-for="quiz in quizzes"
+            v-for="quiz in filteredQuizzes"
             :key="quiz.id"
             @click="openDetail(quiz)"
             class="bg-white rounded-xl shadow-sm hover:shadow-md transition border border-gray-100 p-6 flex flex-col cursor-pointer group"
@@ -439,6 +457,8 @@ const saveQuiz = async () => {
         </div>
       </div>
     </main>
+
+
 
     <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" @click="showCreateModal = false"></div>
@@ -460,6 +480,8 @@ const saveQuiz = async () => {
           </button>
         </div>
 
+
+
         <form @submit.prevent="handleCreateQuiz" class="space-y-4">
 
           <div>
@@ -474,6 +496,7 @@ const saveQuiz = async () => {
             <input @change="handleFileUpload" type="file" accept="application/pdf" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
             <p class="text-xs text-gray-400 mt-1">Max 5MB. Le texte sera extrait pour générer les questions.</p>
           </div>
+
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Difficulté</label>
@@ -533,15 +556,69 @@ const saveQuiz = async () => {
               <button @click="handleDeleteQuiz" class="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 text-sm">
                 🗑️ Supprimer
               </button>
+
             </div>
           </div>
         </div>
+
+
+        <div class="flex border-b border-gray-200 mb-6">
+          <button
+              @click="detailTab = 'infos'"
+              :class="`flex-1 pb-2 font-bold text-sm ${detailTab === 'infos' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`"
+          >
+            Informations & Partage
+          </button>
+          <button
+              @click="detailTab = 'results'; fetchResults()"
+              :class="`flex-1 pb-2 font-bold text-sm ${detailTab === 'results' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`"
+          >
+            Résultats Joueurs
+          </button>
+        </div>
+
+        <div v-if="detailTab === 'infos'">
+        </div>
+
+        <div v-if="detailTab === 'results'">
+
+          <div v-if="quizResults.length === 0" class="text-center py-8 text-gray-500 text-sm">
+            Aucun joueur n'a encore terminé ce quiz.
+          </div>
+
+          <div v-else class="overflow-y-auto max-h-64">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 text-gray-600 font-bold">
+              <tr>
+                <th class="p-3 rounded-tl-lg">Joueur</th>
+                <th class="p-3">Score</th>
+                <th class="p-3 rounded-tr-lg">Date</th>
+              </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+              <tr v-for="res in quizResults" :key="res.id">
+                <td class="p-3 font-medium text-gray-800">{{ res.guestName || 'Anonyme' }}</td>
+                <td class="p-3">
+            <span :class="`px-2 py-1 rounded text-xs font-bold ${res.score >= res.totalQuestions/2 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`">
+              {{ res.score }} / {{ res.totalQuestions }}
+            </span>
+                </td>
+                <td class="p-3 text-gray-500 text-xs">
+                  {{ new Date(res.completedAt).toLocaleDateString() }}
+                </td>
+              </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
 
         <div class="bg-gray-50 p-4 rounded-xl mb-6">
           <p class="text-sm text-gray-600 mb-2"><strong>Sujet :</strong> {{ selectedQuiz.topic }}</p>
           <p class="text-sm text-gray-600 mb-2"><strong>Créé le :</strong> {{ new Date(selectedQuiz.createdAt).toLocaleDateString() }}</p>
           <p class="text-sm text-gray-600"><strong>Questions :</strong> {{ selectedQuiz.questions.length }} QCM</p>
         </div>
+
 
         <div class="flex gap-3 mb-6">
           <button
@@ -557,6 +634,7 @@ const saveQuiz = async () => {
             ✅ PDF de la Correction
           </button>
         </div>
+
 
         <div class="mt-6 bg-purple-50 p-4 rounded-xl border border-purple-100">
           <div class="flex justify-between items-center mb-2">
@@ -682,6 +760,7 @@ const saveQuiz = async () => {
           <label class="block text-sm font-bold text-gray-700 mb-2">Titre du Quiz</label>
           <input v-model="editingQuiz.title" class="w-full text-xl font-bold border-b-2 border-gray-300 focus:border-blue-600 outline-none px-2 py-1 bg-transparent" type="text">
         </div>
+
 
 
 

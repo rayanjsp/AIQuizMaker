@@ -314,7 +314,6 @@ exports.submitPublicScore = async (req, res) => {
     }
 };
 
-// Récupérer les résultats d'un quiz spécifique
 exports.getQuizResults = async (req, res) => {
     try {
         const { id } = req.params;
