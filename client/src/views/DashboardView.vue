@@ -507,17 +507,36 @@ const saveQuiz = async () => {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de questions</label>
-            <div class="flex items-center gap-4">
-              <input
-                  type="range"
-                  v-model.number="newNbQuestions"
-                  min="5"
-                  max="30"
-                  step="5"
-                  class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-sm font-medium text-gray-700">Nombre de questions</label>
+              <span class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-xs">
+                {{ newNbQuestions }} questions
+              </span>
+            </div>
+
+            <div class="grid grid-cols-5 gap-2 mb-2">
+              <button
+                  v-for="num in [5, 10, 15, 20, 25]"
+                  :key="num"
+                  type="button"
+                  @click="newNbQuestions = num"
+                  :class="`py-2 text-sm font-medium rounded-lg border transition-all ${newNbQuestions === num ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-gray-50'}`"
               >
-              <span class="text-blue-600 font-bold w-12 text-right">{{ newNbQuestions }}</span>
+                {{ num }}
+              </button>
+            </div>
+
+            <input
+                type="range"
+                v-model.number="newNbQuestions"
+                min="1"
+                max="30"
+                step="1"
+                class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            >
+            <div class="flex justify-between text-xs text-gray-400 mt-1">
+              <span>1</span>
+              <span>30</span>
             </div>
           </div>
 

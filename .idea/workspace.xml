@@ -4,10 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7f654453-15b5-4cee-af4c-d801bdc9f783" name="Changes" comment="Génération quizz + Frontend (landing + register + login + dashboard)">
+    <list default="true" id="7f654453-15b5-4cee-af4c-d801bdc9f783" name="Changes" comment="Afficher résultat + recherche">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/src/views/DashboardView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/client/src/views/DashboardView.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/src/controllers/quizController.js" beforeDir="false" afterPath="$PROJECT_DIR$/server/src/controllers/quizController.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/src/services/aiService.js" beforeDir="false" afterPath="$PROJECT_DIR$/server/src/services/aiService.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -93,7 +92,7 @@
       <workItem from="1763740040786" duration="30455000" />
       <workItem from="1764056403536" duration="9104000" />
       <workItem from="1764582223307" duration="234000" />
-      <workItem from="1764661068677" duration="2473000" />
+      <workItem from="1764661068677" duration="4903000" />
     </task>
     <task id="LOCAL-00001" summary="initial">
       <option name="closed" value="true" />
@@ -127,7 +126,15 @@
       <option name="project" value="LOCAL" />
       <updated>1763904045272</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="Afficher résultat + recherche">
+      <option name="closed" value="true" />
+      <created>1764663830308</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1764663830308</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -137,6 +144,7 @@
     <MESSAGE value="initial" />
     <MESSAGE value="Authentification backend faite, avec MAJ BDD qui fonctionne" />
     <MESSAGE value="Génération quizz + Frontend (landing + register + login + dashboard)" />
-    <option name="LAST_COMMIT_MESSAGE" value="Génération quizz + Frontend (landing + register + login + dashboard)" />
+    <MESSAGE value="Afficher résultat + recherche" />
+    <option name="LAST_COMMIT_MESSAGE" value="Afficher résultat + recherche" />
   </component>
 </project>

@@ -1,8 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
-const { generateQuiz, aiAssist } = require('../services/aiService');
+const { generateQuiz, generateQuizFromPDF, aiAssist } = require('../services/aiService');
 const prisma = new PrismaClient();
 const { buildPDF } = require('../services/pdfService');
-const { extractTextFromPDF } = require('../services/pdfExtractor');
+const fs = require('fs');
 
 exports.createQuiz = async (req, res) => {
     try {
@@ -210,18 +210,17 @@ exports.createQuizFromPDF = async (req, res) => {
 
         const { topic, difficulty, nbQuestions } = req.body;
 
-        // 1. Extraire le texte du fichier
-        const pdfText = await extractTextFromPDF(req.file.path);
+        // 1. Lire le fichier PDF en tant que buffer
+        const pdfBuffer = fs.readFileSync(req.file.path);
+        console.log(`📄 PDF lu : ${(pdfBuffer.length / 1024).toFixed(1)} Ko`);
 
-        console.log("📄 Texte extrait (aperçu) :", pdfText.substring(0, 100) + "...");
-
-        // 2. Appeler l'IA avec ce texte
-        const quizData = await generateQuiz(topic, difficulty, pdfText, nbQuestions);
+        // 2. Envoyer directement au modèle vision (il VOIT les pages)
+        const quizData = await generateQuizFromPDF(pdfBuffer, difficulty, nbQuestions);
 
         // 3. Sauvegarder (Comme avant)
         const newQuiz = await prisma.quiz.create({
             data: {
-                title: topic, // On utilise le sujet comme titre
+                title: topic || "Quiz basé sur PDF",
                 topic: "Basé sur PDF",
                 difficulty: difficulty,
                 userId: req.user.userId,
@@ -238,10 +237,17 @@ exports.createQuizFromPDF = async (req, res) => {
             include: { questions: { include: { options: true } } }
         });
 
+        // Nettoyage du fichier temporaire
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+
         res.status(201).json({ message: "Quiz PDF généré !", quiz: newQuiz });
 
     } catch (error) {
         console.error(error);
+        // Nettoyage du fichier temporaire en cas d'erreur
+        if (req.file && req.file.path) {
+            try { fs.unlinkSync(req.file.path); } catch (e) {}
+        }
         res.status(500).json({ error: "Erreur analyse PDF" });
     }
 };

@@ -1,17 +1,24 @@
 const OpenAI = require('openai');
+const { pdfToPng } = require('pdf-to-png-converter');
 
-// Configuration du client pour DeepSeek
+// Configuration du client pour DeepSeek (quiz sans PDF)
 const client = new OpenAI({
     apiKey: process.env.DEEPSEEK_API_KEY,
     baseURL: 'https://api.deepseek.com'
 });
 
+// Configuration du client pour OpenRouter (vision PDF)
+const openrouterClient = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: 'https://openrouter.ai/api/v1'
+});
+
 const SYSTEM_PROMPT = `
 Tu es un expert pédagogique chargé de générer des quiz interactifs.
-Ton objectif est de générer 5 questions à choix multiples (QCM) sur un sujet donné.
+Ton objectif est de générer un nombre spécifique de questions à choix multiples (QCM) sur un sujet donné.
 
 RÈGLES STRICTES :
-1. Réponds UNIQUEMENT avec un tableau JSON valide.
+1. Réponds UNIQUEMENT avec un tableau JSON valide contenant le nombre exact de questions demandées.
 2. Pas de Markdown (pas de \`\`\`json), pas de texte avant ou après.
 3. La langue doit être le Français.
 4. Chaque question doit avoir 4 options, dont une seule est vraie.
@@ -89,7 +96,85 @@ async function generateQuiz(topic, difficulty, pdfContent = null,nbQuestions = 5
     }
 }
 
-// 2. L'ASSISTANT (Question seule ou Options seules)
+// 2. GÉNÉRER UN QUIZ À PARTIR D'UN PDF (VISION)
+async function generateQuizFromPDF(pdfBuffer, difficulty, nbQuestions = 5) {
+    try {
+        const qCount = Math.max(5, Math.min(30, nbQuestions));
+
+        console.log(`🤖 Conversion PDF en images...`);
+
+        // Convertir les pages PDF en images PNG
+        const pngPages = await pdfToPng(pdfBuffer, {
+            disableFontFace: false,
+            useSystemFonts: false,
+            viewportScale: 2.0, // Haute résolution pour une meilleure lisibilité
+        });
+
+        // Limiter à 10 pages max (context window)
+        const pagesToSend = pngPages.slice(0, 10);
+        console.log(`📄 ${pagesToSend.length} page(s) converties en images (sur ${pngPages.length} totales)`);
+
+        // Construire les content parts : chaque page = une image
+        const imageContentParts = pagesToSend.map((page, index) => ({
+            type: 'image_url',
+            image_url: {
+                url: `data:image/png;base64,${page.content.toString('base64')}`,
+                detail: 'high'
+            }
+        }));
+
+        const userContent = [
+            ...imageContentParts,
+            {
+                type: 'text',
+                text: `Voici les pages d'un document PDF (cours/support pédagogique).
+Analyse TOUT le contenu visible : texte, images, schémas, tableaux, formules, graphiques.
+
+TÂCHE : Génère un quiz de ${qCount} questions QCM (Niveau ${difficulty}) basé UNIQUEMENT sur le contenu de ce document.
+
+${SYSTEM_PROMPT}`
+            }
+        ];
+
+        console.log(`🤖 Envoi à OpenRouter (qwen/qwen2.5-vl-72b-instruct:free)...`);
+
+        const completion = await openrouterClient.chat.completions.create({
+            model: 'google/gemma-3-12b-it:free',
+            messages: [
+                { role: 'user', content: userContent }
+            ],
+            max_tokens: 4096
+        });
+
+        console.log("🤖 Réponse brute d'OpenRouter :", JSON.stringify(completion, null, 2));
+
+        if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
+            throw new Error(`Réponse OpenRouter invalide: ${JSON.stringify(completion)}`);
+        }
+
+        const rawContent = completion.choices[0].message.content;
+        console.log("🤖 Réponse reçue, parsing JSON...");
+
+        const start = rawContent.indexOf('[');
+        const end = rawContent.lastIndexOf(']');
+        if (start === -1 || end === -1) throw new Error("Aucun JSON valide dans la réponse");
+        const cleanJson = rawContent.substring(start, end + 1);
+        const quizData = JSON.parse(cleanJson);
+
+        if (Array.isArray(quizData)) {
+            quizData.forEach(q => q.options && (q.options = shuffleArray(q.options)));
+        }
+
+        console.log(`✅ Quiz PDF généré : ${quizData.length} questions`);
+        return quizData;
+
+    } catch (error) {
+        console.error("❌ Erreur IA Vision PDF :", error);
+        throw error;
+    }
+}
+
+// 3. L'ASSISTANT (Question seule ou Options seules)
 async function aiAssist(type, context, difficulty = "Moyen", existingQuestions = [], globalTopic = "") {
     try {
         let prompt = "";
@@ -173,4 +258,4 @@ async function aiAssist(type, context, difficulty = "Moyen", existingQuestions =
     }
 }
 
-module.exports = { generateQuiz, aiAssist };
+module.exports = { generateQuiz, generateQuizFromPDF, aiAssist };
