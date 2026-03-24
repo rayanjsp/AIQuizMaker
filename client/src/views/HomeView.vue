@@ -3,70 +3,83 @@ import { RouterLink } from 'vue-router';
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+  <div class="min-h-screen bg-slate-50 flex flex-col font-sans">
 
-    <nav class="p-6 flex justify-between items-center max-w-7xl mx-auto w-full">
-      <h1 class="text-2xl font-bold text-blue-600 flex items-center gap-2">
-        🤖 AI Quiz Maker
-      </h1>
-      <div class="space-x-4">
-        <RouterLink to="/login" class="text-gray-600 hover:text-blue-600 font-medium">Connexion</RouterLink>
-        <RouterLink to="/register" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
-          S'inscrire
+    <!-- Header -->
+    <nav class="p-5 flex justify-between items-center border-b border-slate-200 bg-white shadow-sm">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📝</span>
+        <div>
+          <h1 class="text-lg font-bold text-slate-800 leading-none">AI Quiz Maker</h1>
+          <p class="text-xs text-slate-400">Projet BTS SIO — 2025/2026</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <RouterLink to="/login" class="text-sm text-slate-600 hover:text-blue-600 font-medium transition">Connexion</RouterLink>
+        <RouterLink to="/register" class="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-medium">
+          Créer un compte
         </RouterLink>
       </div>
     </nav>
 
-    <main class="flex-grow flex items-center justify-center px-4">
-      <div class="text-center max-w-3xl mx-auto">
-        <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold mb-4 inline-block">
-          Propulsé par DeepSeek AI
+    <!-- Hero -->
+    <main class="flex-grow flex items-center justify-center px-4 py-16">
+      <div class="max-w-2xl mx-auto text-center">
+
+        <!-- Badge scolaire -->
+        <span class="inline-flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-semibold mb-6">
+          🎓 Projet de fin d'année — BTS SIO SLAM
         </span>
 
-        <h1 class="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
-          Générez des Quiz <br>
-          <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-            en quelques secondes
-          </span>
+        <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4 leading-tight">
+          Générez un quiz<br>
+          <span class="text-blue-600">depuis n'importe quel texte</span>
         </h1>
 
-        <p class="text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
-          Transformez n'importe quel sujet en un QCM interactif grâce à l'intelligence artificielle.
-          Idéal pour les étudiants et les enseignants.
+        <p class="text-base text-slate-500 mb-2 max-w-lg mx-auto leading-relaxed">
+          Entrez un sujet, collez un texte ou importez un PDF — l'IA génère automatiquement un QCM corrigé.
+        </p>
+        <p class="text-sm text-slate-400 mb-10">
+          Application développée dans le cadre d'un projet scolaire, utilisant <strong class="text-slate-500">Vue.js</strong>, <strong class="text-slate-500">Node.js</strong> et <strong class="text-slate-500">DeepSeek AI</strong>.
         </p>
 
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
           <RouterLink
-              to="/register"
-              class="px-8 py-4 bg-blue-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-blue-700 transform hover:-translate-y-1 transition duration-300"
+            to="/register"
+            class="px-7 py-3 bg-blue-600 text-white font-semibold rounded-xl shadow hover:bg-blue-700 transition duration-200"
           >
-            Commencer gratuitement
+            Essayer l'application
           </RouterLink>
-
-          <button class="px-8 py-4 bg-white text-gray-700 text-lg font-bold rounded-xl shadow hover:bg-gray-50 transition duration-300 border border-gray-200">
-            Voir la démo
-          </button>
+          <RouterLink
+            to="/login"
+            class="px-7 py-3 bg-white text-slate-700 font-semibold rounded-xl border border-slate-200 shadow-sm hover:bg-slate-50 transition duration-200"
+          >
+            Se connecter
+          </RouterLink>
         </div>
 
-        <div class="mt-12 grid grid-cols-3 gap-8 text-gray-500 grayscale opacity-70">
-          <div>
-            <p class="font-bold text-2xl text-gray-800">100+</p>
-            <p class="text-sm">Quiz générés</p>
+        <!-- Fonctionnalités simples -->
+        <div class="mt-14 grid grid-cols-1 sm:grid-cols-2 gap-6 text-left max-w-xl mx-auto">
+          <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+            <div class="text-2xl mb-2">✍️</div>
+            <h3 class="font-semibold text-slate-800 text-sm mb-1">Génération par sujet</h3>
+            <p class="text-xs text-slate-400">Décrivez un thème et obtenez un quiz en quelques secondes.</p>
           </div>
-          <div>
-            <p class="font-bold text-2xl text-gray-800">IA</p>
-            <p class="text-sm">DeepSeek V3</p>
-          </div>
-          <div>
-            <p class="font-bold text-2xl text-gray-800">0€</p>
-            <p class="text-sm">Gratuit (Beta)</p>
+          <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+            <div class="text-2xl mb-2">📊</div>
+            <h3 class="font-semibold text-slate-800 text-sm mb-1">Suivi des résultats</h3>
+            <p class="text-xs text-slate-400">Consultez vos quiz passés et partagez-les via un lien.</p>
           </div>
         </div>
+
       </div>
     </main>
 
-    <footer class="p-6 text-center text-gray-400 text-sm">
-      &copy; 2025 AI Quiz Maker - Projet BTS SIO
+    <!-- Footer -->
+    <footer class="p-5 text-center border-t border-slate-100 bg-white">
+      <p class="text-xs text-slate-400">
+        AI Quiz Maker — Projet BTS SIO SLAM &nbsp;·&nbsp; Année scolaire 2025/2026
+      </p>
     </footer>
 
   </div>

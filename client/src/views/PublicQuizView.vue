@@ -1,28 +1,23 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
+import { useToast } from 'vue-toastification';
+import { useQuizGame } from '../composables/useQuizGame.js';
 
-const route = useRoute(); // Pour récupérer l'UUID dans l'URL
+const route = useRoute();
+const toast = useToast();
 const quizUuid = route.params.uuid;
 
-// États
-const step = ref('intro'); // 'intro' (pseudo), 'playing' (jeu), 'finished' (score)
+const step = ref('intro');
 const quiz = ref(null);
 const pseudo = ref('');
 const loading = ref(true);
 const error = ref('');
 
-// Jeu
-const currentQuestionIndex = ref(0);
-const score = ref(0);
-const selectedOptionId = ref(null);
-const showCorrection = ref(false);
-
-// 1. Charger le quiz au démarrage
 onMounted(async () => {
   try {
     const res = await fetch(`/api/quiz/public/${quizUuid}`);
-    if (!res.ok) throw new Error("Ce quiz est introuvable ou privé.");
+    if (!res.ok) throw new Error('Ce quiz est introuvable ou privé.');
     quiz.value = await res.json();
   } catch (e) {
     error.value = e.message;
@@ -31,36 +26,26 @@ onMounted(async () => {
   }
 });
 
-// 2. Commencer le jeu
+const {
+  currentQuestionIndex,
+  score,
+  showCorrection,
+  currentQuestion,
+  handleAnswer,
+  nextQuestion,
+  getOptionClass
+} = useQuizGame(quiz);
+
 const startGame = () => {
-  if (!pseudo.value.trim()) return alert("Choisis un pseudo !");
+  if (!pseudo.value.trim()) {
+    toast.error('Choisis un pseudo !');
+    return;
+  }
   step.value = 'playing';
 };
 
-// 3. Logique de jeu (Similaire au Dashboard)
-const currentQuestion = computed(() => quiz.value?.questions[currentQuestionIndex.value]);
-
-const handleAnswer = (option) => {
-  if (showCorrection.value) return;
-  selectedOptionId.value = option.id;
-  showCorrection.value = true;
-  if (option.isCorrect) score.value++;
-};
-
-const nextQuestion = () => {
-  if (currentQuestionIndex.value < quiz.value.questions.length - 1) {
-    currentQuestionIndex.value++;
-    selectedOptionId.value = null;
-    showCorrection.value = false;
-  } else {
-    finishGame();
-  }
-};
-
-// 4. Fin du jeu et envoi du score
 const finishGame = async () => {
   step.value = 'finished';
-  // Sauvegarde silencieuse du score
   await fetch(`/api/quiz/public/${quizUuid}/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -70,14 +55,6 @@ const finishGame = async () => {
       pseudo: pseudo.value
     })
   });
-};
-
-// Utils couleurs
-const getOptionClass = (option) => {
-  if (!showCorrection.value) return 'bg-white hover:bg-blue-50 border-gray-200 text-gray-700';
-  if (option.isCorrect) return 'bg-green-500 text-white border-green-600';
-  if (selectedOptionId.value === option.id) return 'bg-red-500 text-white border-red-600';
-  return 'bg-gray-100 opacity-50';
 };
 </script>
 
@@ -129,7 +106,7 @@ const getOptionClass = (option) => {
 
       <div v-if="showCorrection" class="bg-blue-50 p-6 border-t flex justify-between items-center animate-fade-in-up">
         <p class="text-sm text-blue-800 flex-1 mr-4" v-if="currentQuestion.explanation">💡 {{ currentQuestion.explanation }}</p>
-        <button @click="nextQuestion" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg">Suivant →</button>
+        <button @click="nextQuestion(finishGame)" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg">Suivant →</button>
       </div>
     </div>
 

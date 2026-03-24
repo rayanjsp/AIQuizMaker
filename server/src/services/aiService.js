@@ -1,17 +1,46 @@
 const OpenAI = require('openai');
-const { pdfToPng } = require('pdf-to-png-converter');
+const { PROVIDER_CONFIG, VALID_PROVIDERS, QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } = require('../config/constants');
 
-// Configuration du client pour DeepSeek (quiz sans PDF)
-const client = new OpenAI({
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    baseURL: 'https://api.deepseek.com'
-});
+// --- RÉSOLUTION DU FOURNISSEUR IA ---
+function resolveProvider() {
+    const requested = process.env.AI_PROVIDER?.toLowerCase();
 
-// Configuration du client pour OpenRouter (vision PDF)
-const openrouterClient = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: 'https://openrouter.ai/api/v1'
-});
+    if (requested) {
+        if (!VALID_PROVIDERS.includes(requested))
+            throw new Error(`[aiService] AI_PROVIDER="${requested}" invalide. Valeurs acceptées : ${VALID_PROVIDERS.join(', ')}`);
+        const cfg = PROVIDER_CONFIG[requested];
+        if (!process.env[cfg.envKey])
+            throw new Error(`[aiService] AI_PROVIDER="${requested}" mais ${cfg.envKey} est absent du fichier .env`);
+        return requested;
+    }
+
+    // Auto-détection : première clé présente dans l'ordre deepseek > openai > openrouter
+    for (const name of VALID_PROVIDERS) {
+        if (process.env[PROVIDER_CONFIG[name].envKey]) {
+            console.log(`[aiService] AI_PROVIDER non défini — fournisseur auto-détecté : ${name}`);
+            return name;
+        }
+    }
+
+    throw new Error('[aiService] Aucun fournisseur IA configuré. Définir AI_PROVIDER et la clé correspondante dans .env');
+}
+
+// --- CONSTRUCTION DU CLIENT (une seule fois au chargement du module) ---
+const PROVIDER_NAME = resolveProvider();
+const cfg = PROVIDER_CONFIG[PROVIDER_NAME];
+
+// OPENROUTER_MODEL n'a d'effet que si PROVIDER_NAME === 'openrouter'
+const AI_MODEL = (PROVIDER_NAME === 'openrouter' && process.env.OPENROUTER_MODEL)
+    ? process.env.OPENROUTER_MODEL
+    : cfg.defaultModel;
+
+const clientOptions = { apiKey: process.env[cfg.envKey] };
+if (cfg.baseURL) clientOptions.baseURL = cfg.baseURL;
+// Pour OpenAI : baseURL est null → le SDK utilise l'URL standard
+
+const client = new OpenAI(clientOptions);
+console.log(`[aiService] Fournisseur actif : ${PROVIDER_NAME} | modèle : ${AI_MODEL}`);
+
 
 const SYSTEM_PROMPT = `
 Tu es un expert pédagogique chargé de générer des quiz interactifs.
@@ -50,35 +79,22 @@ function shuffleArray(array) {
 }
 
 // 1. GÉNÉRER UN QUIZ COMPLET
-async function generateQuiz(topic, difficulty, pdfContent = null,nbQuestions = 5) {
+async function generateQuiz(topic, difficulty, nbQuestions = 5) {
     try {
-        console.log(`🤖 Envoi à DeepSeek : ${topic} (${difficulty}) - ${nbQuestions} questions`);
+        console.log(`[aiService] Envoi à ${PROVIDER_NAME} (${AI_MODEL}) : ${topic} (${difficulty}) - ${nbQuestions} questions`);
 
-        let userMessage = "";
-        const qCount = Math.max(5, Math.min(30, nbQuestions)); // Sécurité : borné entre 5 et 30
-
-        // On met à jour le prompt pour inclure le nombre
+        const qCount = Math.max(QUIZ_MIN_QUESTIONS, Math.min(QUIZ_MAX_QUESTIONS, nbQuestions)); // Sécurité : borné entre min et max
         const instruction = `Génère un quiz de ${qCount} questions (Niveau ${difficulty})`;
-
-        if (pdfContent) {
-            const safeContent = pdfContent.substring(0, 15000);
-            userMessage = `
-                Voici le contenu d'un cours : """${safeContent}"""
-                TÂCHE : ${instruction} basé UNIQUEMENT sur ce texte.
-            `;
-        } else {
-            userMessage = `${instruction} sur le sujet : ${topic}`;
-        }
+        const userMessage = `${instruction} sur le sujet : ${topic}`;
 
         const completion = await client.chat.completions.create({
-            model: 'deepseek-chat',
+            model: AI_MODEL,
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
                 { role: 'user', content: userMessage }
             ]
         });
 
-        // ... Le reste du code (nettoyage JSON, shuffle) reste IDENTIQUE ...
         const rawContent = completion.choices[0].message.content;
         const start = rawContent.indexOf('[');
         const end = rawContent.lastIndexOf(']');
@@ -96,83 +112,6 @@ async function generateQuiz(topic, difficulty, pdfContent = null,nbQuestions = 5
     }
 }
 
-// 2. GÉNÉRER UN QUIZ À PARTIR D'UN PDF (VISION)
-async function generateQuizFromPDF(pdfBuffer, difficulty, nbQuestions = 5) {
-    try {
-        const qCount = Math.max(5, Math.min(30, nbQuestions));
-
-        console.log(`🤖 Conversion PDF en images...`);
-
-        // Convertir les pages PDF en images PNG
-        const pngPages = await pdfToPng(pdfBuffer, {
-            disableFontFace: false,
-            useSystemFonts: false,
-            viewportScale: 2.0, // Haute résolution pour une meilleure lisibilité
-        });
-
-        // Limiter à 10 pages max (context window)
-        const pagesToSend = pngPages.slice(0, 10);
-        console.log(`📄 ${pagesToSend.length} page(s) converties en images (sur ${pngPages.length} totales)`);
-
-        // Construire les content parts : chaque page = une image
-        const imageContentParts = pagesToSend.map((page, index) => ({
-            type: 'image_url',
-            image_url: {
-                url: `data:image/png;base64,${page.content.toString('base64')}`,
-                detail: 'high'
-            }
-        }));
-
-        const userContent = [
-            ...imageContentParts,
-            {
-                type: 'text',
-                text: `Voici les pages d'un document PDF (cours/support pédagogique).
-Analyse TOUT le contenu visible : texte, images, schémas, tableaux, formules, graphiques.
-
-TÂCHE : Génère un quiz de ${qCount} questions QCM (Niveau ${difficulty}) basé UNIQUEMENT sur le contenu de ce document.
-
-${SYSTEM_PROMPT}`
-            }
-        ];
-
-        console.log(`🤖 Envoi à OpenRouter (qwen/qwen2.5-vl-72b-instruct:free)...`);
-
-        const completion = await openrouterClient.chat.completions.create({
-            model: 'google/gemma-3-12b-it:free',
-            messages: [
-                { role: 'user', content: userContent }
-            ],
-            max_tokens: 4096
-        });
-
-        console.log("🤖 Réponse brute d'OpenRouter :", JSON.stringify(completion, null, 2));
-
-        if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
-            throw new Error(`Réponse OpenRouter invalide: ${JSON.stringify(completion)}`);
-        }
-
-        const rawContent = completion.choices[0].message.content;
-        console.log("🤖 Réponse reçue, parsing JSON...");
-
-        const start = rawContent.indexOf('[');
-        const end = rawContent.lastIndexOf(']');
-        if (start === -1 || end === -1) throw new Error("Aucun JSON valide dans la réponse");
-        const cleanJson = rawContent.substring(start, end + 1);
-        const quizData = JSON.parse(cleanJson);
-
-        if (Array.isArray(quizData)) {
-            quizData.forEach(q => q.options && (q.options = shuffleArray(q.options)));
-        }
-
-        console.log(`✅ Quiz PDF généré : ${quizData.length} questions`);
-        return quizData;
-
-    } catch (error) {
-        console.error("❌ Erreur IA Vision PDF :", error);
-        throw error;
-    }
-}
 
 // 3. L'ASSISTANT (Question seule ou Options seules)
 async function aiAssist(type, context, difficulty = "Moyen", existingQuestions = [], globalTopic = "") {
@@ -224,7 +163,7 @@ async function aiAssist(type, context, difficulty = "Moyen", existingQuestions =
         }
 
         const completion = await client.chat.completions.create({
-            model: 'deepseek-chat',
+            model: AI_MODEL,
             messages: [{ role: 'user', content: prompt }]
         });
 
@@ -258,4 +197,4 @@ async function aiAssist(type, context, difficulty = "Moyen", existingQuestions =
     }
 }
 
-module.exports = { generateQuiz, generateQuizFromPDF, aiAssist };
+module.exports = { generateQuiz, aiAssist };

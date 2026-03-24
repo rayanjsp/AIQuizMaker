@@ -1,55 +1,28 @@
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
-const router = useRouter();
+const router = useRouter()
+const { login } = useAuth()
 
-// Variables du formulaire
-const email = ref('');
-const password = ref('');
+const email = ref('')
+const password = ref('')
+const errorMessage = ref('')
+const loading = ref(false)
 
-// États (Erreur / Chargement)
-const errorMessage = ref('');
-const isSubmitting = ref(false);
-
-const handleLogin = async () => {
-  errorMessage.value = '';
-  isSubmitting.value = true;
-
+async function handleLogin() {
+  errorMessage.value = ''
+  loading.value = true
   try {
-    // 1. Appel API au Backend
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || data.error || "Erreur de connexion");
-    }
-
-    // 2. SUCCÈS : On stocke le Token !
-    console.log("Connexion réussie :", data);
-
-    // C'est ici que la magie opère : on garde le token dans la poche du navigateur
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('username', data.username);
-
-    // 3. Redirection (vers l'accueil pour l'instant, bientôt le Dashboard)
-    // On force un petit rechargement ou on redirige
-    router.push('/dashboard');
-
-  } catch (error) {
-    errorMessage.value = error.message;
+    await login(email.value, password.value)
+    router.push('/dashboard')
+  } catch (e) {
+    errorMessage.value = e.message
   } finally {
-    isSubmitting.value = false;
+    loading.value = false
   }
-};
+}
 </script>
 
 <template>
@@ -88,10 +61,10 @@ const handleLogin = async () => {
 
         <button
             type="submit"
-            :disabled="isSubmitting"
+            :disabled="loading"
             class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition duration-300 disabled:opacity-50"
         >
-          {{ isSubmitting ? 'Connexion en cours...' : "Se connecter" }}
+          {{ loading ? 'Connexion en cours...' : "Se connecter" }}
         </button>
 
       </form>

@@ -1,35 +1,59 @@
-const { PrismaClient } = require('@prisma/client');
-const { generateQuiz, generateQuizFromPDF, aiAssist } = require('../services/aiService');
-const prisma = new PrismaClient();
+const prisma = require('../config/prisma');
+const { generateQuiz, aiAssist } = require('../services/aiService');
 const { buildPDF } = require('../services/pdfService');
-const fs = require('fs');
+const { QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } = require('../config/constants');
+
+// --- HELPER : parse et valider un ID entier depuis les params ---
+function parseId(param) {
+    const id = parseInt(param);
+    if (isNaN(id)) return null;
+    return id;
+}
+
+// --- MIDDLEWARE : vérifier que le quiz appartient à l'utilisateur connecté ---
+async function requireQuizOwner(req, res, next) {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID invalide' });
+    const quiz = await prisma.quiz.findUnique({ where: { id } });
+    if (!quiz) return res.status(404).json({ error: 'Quiz introuvable' });
+    if (quiz.userId !== req.user.userId) return res.status(403).json({ error: 'Accès refusé' });
+    req.quiz = quiz;
+    next();
+}
+
+exports.requireQuizOwner = requireQuizOwner;
 
 exports.createQuiz = async (req, res) => {
     try {
         const { topic, difficulty, nbQuestions } = req.body;
-        // On récupère l'ID de l'utilisateur connecté (mis dans req.user par le middleware d'auth plus tard)
-        // Pour l'instant, on peut simuler un ID, ou attendre d'avoir fait le middleware.
         const userId = req.user.userId;
 
-        // 1. Appeler l'IA (C'est ce que tu viens de tester)
-        const quizData = await generateQuiz(topic, difficulty, null, nbQuestions);
+        // Validation des inputs
+        if (!topic || !topic.trim()) {
+            return res.status(400).json({ error: 'Le sujet (topic) est obligatoire' });
+        }
 
-        // 2. Sauvegarder tout dans la BDD avec Prisma
-        // C'est ici le challenge !
+        const nb = parseInt(nbQuestions);
+        if (isNaN(nb) || nb < QUIZ_MIN_QUESTIONS || nb > QUIZ_MAX_QUESTIONS) {
+            return res.status(400).json({
+                error: `Le nombre de questions doit être entre ${QUIZ_MIN_QUESTIONS} et ${QUIZ_MAX_QUESTIONS}`
+            });
+        }
+
+        // 1. Appeler l'IA
+        const quizData = await generateQuiz(topic, difficulty, nb);
+
+        // 2. Sauvegarder dans la BDD
         const newQuiz = await prisma.quiz.create({
             data: {
                 title: `Quiz sur ${topic}`,
                 topic: topic,
                 difficulty: difficulty,
                 userId: userId,
-
-                // LA MAGIE PRISMA : Créer les enfants (Questions) en même temps
                 questions: {
                     create: quizData.map((q) => ({
                         text: q.text,
                         explanation: q.explanation,
-
-                        // LA MAGIE PRISMA (Niveau 2) : Créer les petits-enfants (Options)
                         options: {
                             create: q.options.map((o) => ({
                                 text: o.text,
@@ -39,7 +63,6 @@ exports.createQuiz = async (req, res) => {
                     }))
                 }
             },
-            // On demande à Prisma de nous renvoyer l'objet créé AVEC ses relations
             include: {
                 questions: {
                     include: { options: true }
@@ -62,7 +85,6 @@ exports.getAllQuizzes = async (req, res) => {
             where: { userId: req.user.userId },
             orderBy: { createdAt: 'desc' },
             include: {
-
                 questions: {
                     include: { options: true }
                 }
@@ -74,25 +96,13 @@ exports.getAllQuizzes = async (req, res) => {
         res.status(500).json({ error: "Impossible de récupérer les quiz" });
     }
 };
-// ... (après getAllQuizzes)
 
 // Supprimer un quiz
 exports.deleteQuiz = async (req, res) => {
     try {
-        const { id } = req.params;
-
-        // On vérifie que le quiz appartient bien à l'user avant de supprimer !
-        const count = await prisma.quiz.count({
-            where: { id: parseInt(id), userId: req.user.userId }
-        });
-
-        if (count === 0) {
-            return res.status(403).json({ error: "Accès refusé ou quiz introuvable" });
-        }
-
-        await prisma.quiz.delete({ where: { id: parseInt(id) } });
+        // requireQuizOwner a déjà validé l'ID et chargé req.quiz
+        await prisma.quiz.delete({ where: { id: req.quiz.id } });
         res.json({ message: "Quiz supprimé" });
-
     } catch (error) {
         res.status(500).json({ error: "Erreur suppression" });
     }
@@ -100,46 +110,29 @@ exports.deleteQuiz = async (req, res) => {
 
 exports.updateQuiz = async (req, res) => {
     try {
-        const { id } = req.params;
+        // requireQuizOwner a déjà validé l'ID et chargé req.quiz
         const { title, questions } = req.body;
+        const id = req.quiz.id;
 
-        const count = await prisma.quiz.count({ where: { id: parseInt(id), userId: req.user.userId } });
-        if (count === 0) return res.status(403).json({ error: "Interdit" });
-
-        await prisma.$transaction([
-            //Supprimer les questions existantes (les options partiront avec grâce au cascade)
-            prisma.question.deleteMany({ where: { quizId: parseInt(id) } }),
-
-            // MAJ titre
-            prisma.quiz.update({ where: { id: parseInt(id) }, data: { title } }),
-
-            // Recréer questions
-            prisma.question.createMany({
-                data: questions.map(q => ({
-                    quizId: parseInt(id), // Important : on relie au quiz
-                    text: q.text,
-                    explanation: q.explanation // On garde l'explication si elle existe
-                }))
-            })
-        ]);
-
-        await prisma.quiz.update({ where: { id: parseInt(id) }, data: { title } });
-        await prisma.question.deleteMany({ where: { quizId: parseInt(id) } });
-        for (const q of questions) {
-            await prisma.question.create({
-                data: {
-                    quizId: parseInt(id),
-                    text: q.text,
-                    explanation: q.explanation,
-                    options: {
-                        create: q.options.map(o => ({
-                            text: o.text,
-                            isCorrect: o.isCorrect
-                        }))
+        await prisma.$transaction(async (tx) => {
+            await tx.quiz.update({ where: { id }, data: { title } });
+            await tx.question.deleteMany({ where: { quizId: id } });
+            for (const q of questions) {
+                await tx.question.create({
+                    data: {
+                        quizId: id,
+                        text: q.text,
+                        explanation: q.explanation,
+                        options: {
+                            create: q.options.map(o => ({
+                                text: o.text,
+                                isCorrect: o.isCorrect
+                            }))
+                        }
                     }
-                }
-            });
-        }
+                });
+            }
+        });
 
         res.json({ message: "Quiz sauvegardé !" });
 
@@ -148,6 +141,7 @@ exports.updateQuiz = async (req, res) => {
         res.status(500).json({ error: "Erreur sauvegarde" });
     }
 };
+
 exports.askAiAssist = async (req, res) => {
     try {
         const { type, context, difficulty, existingQuestions, globalTopic } = req.body;
@@ -159,111 +153,37 @@ exports.askAiAssist = async (req, res) => {
         res.status(500).json({ error: "L'IA n'a pas pu répondre" });
     }
 };
-// Générer PDF Vierge
+
+// Télécharger le PDF (vierge ou correction selon la route)
 exports.downloadPdf = async (req, res) => {
     try {
-        const { id } = req.params;
+        // requireQuizOwner a déjà chargé req.quiz (sans les questions/options)
+        // On recharge avec les relations nécessaires pour le PDF
         const quiz = await prisma.quiz.findUnique({
-            where: { id: parseInt(id) },
+            where: { id: req.quiz.id },
             include: { questions: { include: { options: true } } }
         });
 
-        if (!quiz || quiz.userId !== req.user.userId) {
-            return res.status(403).json({ error: "Accès refusé" });
-        }
+        const withAnswers = req.path.includes('correction');
 
-        // On appelle le service qui va écrire directement dans 'res'
-        buildPDF(quiz, res, false);
+        const buffer = await buildPDF(quiz, withAnswers);
+        const filename = `quiz_${quiz.id}${withAnswers ? '_correction' : ''}.pdf`;
+        res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-type', 'application/pdf');
+        res.send(buffer);
 
     } catch (error) {
         console.error(error);
         res.status(500).send("Erreur génération PDF");
-    }
-};
-
-// Générer PDF Correction
-exports.downloadPdfCorrection = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const quiz = await prisma.quiz.findUnique({
-            where: { id: parseInt(id) },
-            include: { questions: { include: { options: true } } }
-        });
-
-        if (!quiz || quiz.userId !== req.user.userId) {
-            return res.status(403).json({ error: "Accès refusé" });
-        }
-
-        // True = Mode correction
-        buildPDF(quiz, res, true);
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Erreur génération PDF");
-    }
-};
-
-exports.createQuizFromPDF = async (req, res) => {
-    try {
-        // Multer a mis le fichier dans req.file
-        if (!req.file) return res.status(400).json({ error: "Aucun fichier envoyé" });
-
-        const { topic, difficulty, nbQuestions } = req.body;
-
-        // 1. Lire le fichier PDF en tant que buffer
-        const pdfBuffer = fs.readFileSync(req.file.path);
-        console.log(`📄 PDF lu : ${(pdfBuffer.length / 1024).toFixed(1)} Ko`);
-
-        // 2. Envoyer directement au modèle vision (il VOIT les pages)
-        const quizData = await generateQuizFromPDF(pdfBuffer, difficulty, nbQuestions);
-
-        // 3. Sauvegarder (Comme avant)
-        const newQuiz = await prisma.quiz.create({
-            data: {
-                title: topic || "Quiz basé sur PDF",
-                topic: "Basé sur PDF",
-                difficulty: difficulty,
-                userId: req.user.userId,
-                questions: {
-                    create: quizData.map((q) => ({
-                        text: q.text,
-                        explanation: q.explanation,
-                        options: {
-                            create: q.options.map((o) => ({ text: o.text, isCorrect: o.isCorrect }))
-                        }
-                    }))
-                }
-            },
-            include: { questions: { include: { options: true } } }
-        });
-
-        // Nettoyage du fichier temporaire
-        try { fs.unlinkSync(req.file.path); } catch (e) {}
-
-        res.status(201).json({ message: "Quiz PDF généré !", quiz: newQuiz });
-
-    } catch (error) {
-        console.error(error);
-        // Nettoyage du fichier temporaire en cas d'erreur
-        if (req.file && req.file.path) {
-            try { fs.unlinkSync(req.file.path); } catch (e) {}
-        }
-        res.status(500).json({ error: "Erreur analyse PDF" });
     }
 };
 
 exports.togglePublic = async (req, res) => {
     try {
-        const { id } = req.params;
-        const quiz = await prisma.quiz.findUnique({ where: { id: parseInt(id) } });
-
-        if (!quiz || quiz.userId !== req.user.userId) {
-            return res.status(403).json({ error: "Accès interdit" });
-        }
-
+        // requireQuizOwner a déjà chargé req.quiz
         const updatedQuiz = await prisma.quiz.update({
-            where: { id: parseInt(id) },
-            data: { isPublic: !quiz.isPublic } // On inverse la valeur
+            where: { id: req.quiz.id },
+            data: { isPublic: !req.quiz.isPublic }
         });
 
         res.json({ isPublic: updatedQuiz.isPublic, publicId: updatedQuiz.publicId });
@@ -274,7 +194,7 @@ exports.togglePublic = async (req, res) => {
 
 exports.getPublicQuiz = async (req, res) => {
     try {
-        const { uuid } = req.params; // On cherche par UUID, pas par ID !
+        const { uuid } = req.params;
 
         const quiz = await prisma.quiz.findUnique({
             where: { publicId: uuid },
@@ -285,8 +205,10 @@ exports.getPublicQuiz = async (req, res) => {
             return res.status(404).json({ error: "Ce quiz n'existe pas ou n'est plus accessible." });
         }
 
-        // Sécurité : On peut retirer les "isCorrect" ici si on veut que le front ne puisse pas tricher
-        // Mais pour l'instant, on laisse simple.
+        quiz.questions = quiz.questions.map(q => ({
+            ...q,
+            options: q.options.map(({ isCorrect, ...o }) => o)
+        }));
         res.json(quiz);
     } catch (error) {
         res.status(500).json({ error: "Erreur chargement quiz" });
@@ -298,7 +220,23 @@ exports.submitPublicScore = async (req, res) => {
         const { uuid } = req.params;
         const { score, total, pseudo } = req.body;
 
-        // On retrouve l'ID interne du quiz grâce à l'UUID
+        // Validation des inputs
+        if (!pseudo || !pseudo.trim()) {
+            return res.status(400).json({ error: 'Le pseudo est obligatoire' });
+        }
+        if (pseudo.trim().length > 50) {
+            return res.status(400).json({ error: 'Le pseudo ne doit pas dépasser 50 caractères' });
+        }
+        if (typeof score !== 'number' || typeof total !== 'number') {
+            return res.status(400).json({ error: 'score et total doivent être des nombres' });
+        }
+        if (total <= 0) {
+            return res.status(400).json({ error: 'total doit être supérieur à 0' });
+        }
+        if (score < 0 || score > total) {
+            return res.status(400).json({ error: 'score invalide (doit être entre 0 et total)' });
+        }
+
         const quiz = await prisma.quiz.findUnique({ where: { publicId: uuid } });
 
         if (!quiz) return res.status(404).json({ error: "Quiz introuvable" });
@@ -308,8 +246,8 @@ exports.submitPublicScore = async (req, res) => {
                 quizId: quiz.id,
                 score: score,
                 totalQuestions: total,
-                guestName: pseudo || "Anonyme",
-                userId: null // C'est un invité
+                guestName: pseudo.trim() || "Anonyme",
+                userId: null
             }
         });
 
@@ -322,15 +260,9 @@ exports.submitPublicScore = async (req, res) => {
 
 exports.getQuizResults = async (req, res) => {
     try {
-        const { id } = req.params;
-
-        // Vérif sécurité
-        const quiz = await prisma.quiz.findUnique({ where: { id: parseInt(id) } });
-        if (!quiz || quiz.userId !== req.user.userId) return res.status(403).json({ error: "Accès refusé" });
-
-        // On récupère les résultats triés par score décroissant
+        // requireQuizOwner a déjà chargé req.quiz
         const results = await prisma.result.findMany({
-            where: { quizId: parseInt(id) },
+            where: { quizId: req.quiz.id },
             orderBy: { score: 'desc' },
             select: {
                 id: true,

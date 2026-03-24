@@ -33,7 +33,7 @@ graph LR
 
     subgraph Data["Données"]
         DB[(MySQL)]
-        AI[DeepSeek API]
+        AI[API IA (DeepSeek / OpenAI / OpenRouter)]
     end
 
     FE -->|"HTTP /api"| MW
@@ -105,7 +105,7 @@ flowchart TD
 | **Backend** | Node.js + Express | ^20.19 / 5.1 |
 | **ORM** | Prisma | 5.19 |
 | **BDD** | MySQL | 5.7+ |
-| **IA** | DeepSeek Chat (via SDK OpenAI) | deepseek-chat |
+| **IA** | DeepSeek / OpenAI / OpenRouter (via SDK OpenAI) | deepseek-chat / gpt-4o-mini / llama-3.3 |
 | **Auth** | JWT (jsonwebtoken) | 9.0 |
 | **PDF** | PDFKit | 0.17 |
 | **Tests** | Jest (backend) + Vitest (frontend) | 30 / 4.1 |
@@ -116,7 +116,7 @@ flowchart TD
 
 - **Node.js** v20.19.0 ou ≥ 22.12.0
 - **MySQL** 5.7+ (local ou distant)
-- **Clé API DeepSeek** — obtenir sur [platform.deepseek.com](https://platform.deepseek.com)
+- **Clé API IA** — au choix : [DeepSeek](https://platform.deepseek.com), [OpenAI](https://platform.openai.com) ou [OpenRouter](https://openrouter.ai) (modèles gratuits disponibles)
 
 ---
 
@@ -139,26 +139,17 @@ npm install
 
 ### 2. Configurer les variables d'environnement
 
-Créer le fichier `server/.env` :
+Copier le fichier d'exemple et remplir les valeurs :
 
-```env
-# Serveur
-PORT=3000
-
-# Base de données MySQL
-DATABASE_URL="mysql://root:motdepasse@localhost:3306/aiquizmaker"
-
-# Intelligence Artificielle
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Sécurité JWT
-JWT_SECRET=une_phrase_secrete_aleatoire_longue
-
-# CORS — URL du frontend
-FRONTEND_URL=http://localhost:5173
+```bash
+cp server/.env.example server/.env
 ```
 
-> La variable `OPENROUTER_API_KEY` est optionnelle (backup IA non utilisé en production).
+Le fichier `server/.env.example` contient toutes les variables documentées. Au minimum, définir :
+- `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`
+- Une clé IA parmi `DEEPSEEK_API_KEY`, `OPENAI_API_KEY` ou `OPENROUTER_API_KEY`
+
+> Voir la section **Variables d'environnement** pour le détail de la configuration IA.
 
 ### 3. Initialiser la base de données
 
@@ -477,7 +468,7 @@ sequenceDiagram
     participant U as Utilisateur
     participant F as Frontend (Vue)
     participant B as Backend (Express)
-    participant AI as DeepSeek API
+    participant AI as Fournisseur IA (DeepSeek / OpenAI / OpenRouter)
     participant DB as MySQL
 
     U->>F: Soumet topic + difficulté + nbQuestions
@@ -492,16 +483,18 @@ sequenceDiagram
     F-->>U: Quiz affiché dans le dashboard
 ```
 
-### DeepSeek Chat API
-Le SDK OpenAI est utilisé en pointant sur l'endpoint DeepSeek :
+### Fournisseur IA
 
-```js
-// server/src/services/aiService.js
-const openai = new OpenAI({
-  baseURL: 'https://api.deepseek.com',
-  apiKey: process.env.DEEPSEEK_API_KEY,
-});
-```
+Le fournisseur actif est sélectionné via la variable `AI_PROVIDER` (ou auto-détecté selon la clé présente).
+Les trois fournisseurs utilisent le SDK OpenAI — seuls `baseURL` et `apiKey` varient.
+
+| Fournisseur | `AI_PROVIDER` | `baseURL` | Modèle par défaut |
+|---|---|---|---|
+| DeepSeek | `deepseek` | `https://api.deepseek.com` | `deepseek-chat` |
+| OpenAI | `openai` | *(standard)* | `gpt-4o-mini` |
+| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` | `meta-llama/llama-3.3-8b-instruct:free` |
+
+La sélection du fournisseur est validée au démarrage : si `AI_PROVIDER` est défini mais que la clé correspondante est absente, le serveur refuse de démarrer avec un message d'erreur explicite.
 
 ### Prompt système
 Le modèle est forcé à répondre en **JSON strict** avec le format :
@@ -590,10 +583,13 @@ Toutes les variables sont définies dans `server/.env`.
 |----------|-------------|---------|-------------|
 | `PORT` | Non (défaut 3000) | `3000` | Port du serveur Express |
 | `DATABASE_URL` | **Oui** | `mysql://root:@localhost:3306/aiquizmaker` | URL de connexion MySQL (format Prisma) |
-| `DEEPSEEK_API_KEY` | **Oui** | `sk-xxxx` | Clé API DeepSeek pour la génération IA |
 | `JWT_SECRET` | **Oui** | `une_phrase_secrete` | Secret pour signer les tokens JWT |
 | `FRONTEND_URL` | **Oui** | `http://localhost:5173` | URL du frontend (utilisé pour CORS) |
-| `OPENROUTER_API_KEY` | Non | `sk-or-xxxx` | Clé API OpenRouter (backup IA, non utilisé) |
+| `AI_PROVIDER` | Non | `openrouter` | Fournisseur IA actif (`deepseek`, `openai`, `openrouter`). Si absent, auto-détecté selon la clé présente. |
+| `DEEPSEEK_API_KEY` | Conditionnelle | `sk-xxxx` | Clé DeepSeek — obligatoire si `AI_PROVIDER=deepseek` |
+| `OPENAI_API_KEY` | Conditionnelle | `sk-xxxx` | Clé OpenAI — obligatoire si `AI_PROVIDER=openai` |
+| `OPENROUTER_API_KEY` | Conditionnelle | `sk-or-xxxx` | Clé OpenRouter — obligatoire si `AI_PROVIDER=openrouter` |
+| `OPENROUTER_MODEL` | Non | `mistralai/mistral-7b-instruct` | Surcharge le modèle OpenRouter (défaut : `meta-llama/llama-3.3-8b-instruct:free`) |
 
 ---
 

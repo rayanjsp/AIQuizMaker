@@ -77,5 +77,5 @@ model Result {
   // ---------------------
 
   quizId         Int
-  quiz           Quiz     @relation(fields: [quizId], references: [id])
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
 }

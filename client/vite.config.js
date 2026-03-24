@@ -18,9 +18,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000', // L'adresse de ton backend
+        target: 'http://localhost:3000',
         changeOrigin: true,
       }
     }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
   }
 })

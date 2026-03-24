@@ -1,9 +1,12 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../config/prisma');
+const { JWT_EXPIRY } = require('../config/constants');
 
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'cle_secrete_temporaire';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET manquant dans .env');
+
+const PASSWORD_REGEX = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{6,30}$/;
 
 function hashPassword(password, salt) {
     return crypto.createHmac('sha512', salt)
@@ -27,8 +30,7 @@ exports.register = async (req, res) => {
             return res.status(400).json({ message: "Format d'email invalide" });
         }
 
-        const passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{6,30}$/;
-        if (!passwordRegex.test(password)) {
+        if (!PASSWORD_REGEX.test(password)) {
             return res.status(400).json({
                 message: "Le mot de passe doit contenir entre 6 et 30 caractères, avec au moins une majuscule, une minuscule et un chiffre."
             });
@@ -56,15 +58,13 @@ exports.register = async (req, res) => {
             }
         });
 
-        // --- 4. AUTO-LOGIN (C'est ici la nouveauté) ---
-        // On crée le badge tout de suite pour le nouvel utilisateur
+        // --- 4. AUTO-LOGIN ---
         const token = jwt.sign(
             { userId: newUser.id },
             JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: JWT_EXPIRY }
         );
 
-        // On renvoie le token directement
         res.status(201).json({
             message: "Compte créé et connecté avec succès !",
             token: token,
@@ -76,6 +76,7 @@ exports.register = async (req, res) => {
         res.status(500).json({ error: "Erreur lors de l'inscription" });
     }
 };
+
 exports.login = async (req, res) => {
     try {
         const email = req.body.email;
@@ -98,12 +99,12 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: "Mot de passe ou e-mail incorrect" });
         }
 
-        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
         res.json({ message: "Connexion réussie", token, username: user.username });
 
     } catch (error) {
-        console.log(error);
+        console.error(error);
         res.status(500).json({ error: "Erreur lors de la connexion" });
     }
 };

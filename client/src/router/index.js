@@ -1,9 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import RegisterView from '../views/RegisterView.vue'
-import HomeView from '../views/HomeView.vue'
-import LoginView from '../views/LoginView.vue'
-import DashboardView from '../views/DashboardView.vue'
-import PublicQuizView from '../views/PublicQuizView.vue'
+import { useAuth } from '../composables/useAuth'
+
+const HomeView = () => import('../views/HomeView.vue')
+const RegisterView = () => import('../views/RegisterView.vue')
+const LoginView = () => import('../views/LoginView.vue')
+const DashboardView = () => import('../views/DashboardView.vue')
+const PublicQuizView = () => import('../views/PublicQuizView.vue')
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -33,6 +36,13 @@ const router = createRouter({
       component: PublicQuizView
     }
   ]
+})
+
+router.beforeEach((to) => {
+  const { isLoggedIn } = useAuth()
+  if (to.path === '/dashboard' && !isLoggedIn()) {
+    return '/login'
+  }
 })
 
 export default router

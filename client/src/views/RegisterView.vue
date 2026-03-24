@@ -1,60 +1,34 @@
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router'; // Pour changer de page
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useToast } from 'vue-toastification'
+import { useAuth } from '@/composables/useAuth'
 
-const router = useRouter();
+const router = useRouter()
+const toast = useToast()
+const { register } = useAuth()
 
-// 1. Les variables réactives (liées aux champs du formulaire)
-const username = ref('');
-const email = ref('');
-const password = ref('');
+const username = ref('')
+const email = ref('')
+const password = ref('')
 
-// Pour gérer les messages d'erreur ou de succès
-const errorMessage = ref('');
-const isSubmitting = ref(false);
+const errorMessage = ref('')
+const isSubmitting = ref(false)
 
-// 2. La fonction qui se lance quand on clique sur "S'inscrire"
 const handleRegister = async () => {
-  // On réinitialise l'erreur
-  errorMessage.value = '';
-  isSubmitting.value = true;
+  errorMessage.value = ''
+  isSubmitting.value = true
 
   try {
-    // Appel à TON API Backend (grâce au proxy, /api redirige vers le port 3000)
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: username.value,
-        email: email.value,
-        password: password.value
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      // Si le backend renvoie une erreur (ex: email déjà pris)
-      throw new Error(data.message || "Erreur lors de l'inscription");
-    }
-
-    // SUCCÈS !
-    console.log("Token reçu :", data.token);
-
-    // 3. On sauvegarde le token (le badge) dans le navigateur
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('username', data.username);
-
-    // 4. On redirige l'utilisateur vers la page d'accueil (ou dashboard)
-    alert("Compte créé avec succès ! Bienvenue " + data.username);
-    router.push('/dashboard');
-
+    await register(username.value, email.value, password.value)
+    toast.success('Inscription réussie !')
+    router.push('/login')
   } catch (error) {
-    errorMessage.value = error.message;
+    errorMessage.value = error.message
   } finally {
-    isSubmitting.value = false;
+    isSubmitting.value = false
   }
-};
+}
 </script>
 
 <template>
