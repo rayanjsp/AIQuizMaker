@@ -1,4 +1,5 @@
 const OpenAI = require('openai');
+const Anthropic = require('@anthropic-ai/sdk');
 const { PROVIDER_CONFIG, VALID_PROVIDERS, AUTO_DETECT_PROVIDERS, QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } = require('../config/constants');
 
 // --- RÉSOLUTION DU FOURNISSEUR IA ---
@@ -47,17 +48,38 @@ if (PROVIDER_NAME === 'custom') {
     AI_MODEL = cfg.defaultModel;
 }
 
-// Construction des options client
-const clientOptions = { apiKey: process.env[cfg.envKey] };
-if (PROVIDER_NAME === 'custom') {
-    clientOptions.baseURL = process.env.AI_BASE_URL;
-} else if (cfg.baseURL) {
-    clientOptions.baseURL = cfg.baseURL;
+// Construction du client selon le provider
+let client, anthropicClient;
+if (PROVIDER_NAME === 'anthropic') {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+} else {
+    const clientOptions = { apiKey: process.env[cfg.envKey] };
+    if (PROVIDER_NAME === 'custom') {
+        clientOptions.baseURL = process.env.AI_BASE_URL;
+    } else if (cfg.baseURL) {
+        clientOptions.baseURL = cfg.baseURL;
+    }
+    client = new OpenAI(clientOptions);
 }
-// Pour OpenAI : baseURL est null → le SDK utilise l'URL standard
-
-const client = new OpenAI(clientOptions);
 console.log(`[aiService] Fournisseur actif : ${PROVIDER_NAME} | modèle : ${AI_MODEL}`);
+
+// --- ABSTRACTION DE L'APPEL IA ---
+// Gère la différence entre le SDK Anthropic et le SDK OpenAI
+async function callAI(messages) {
+    if (PROVIDER_NAME === 'anthropic') {
+        const systemMsg = messages.find(m => m.role === 'system')?.content;
+        const userMessages = messages.filter(m => m.role !== 'system');
+        const response = await anthropicClient.messages.create({
+            model: AI_MODEL,
+            max_tokens: 4096,
+            ...(systemMsg && { system: systemMsg }),
+            messages: userMessages,
+        });
+        return response.content[0].text;
+    }
+    const completion = await client.chat.completions.create({ model: AI_MODEL, messages });
+    return completion.choices[0].message.content;
+}
 
 
 const SYSTEM_PROMPT = `
@@ -104,15 +126,10 @@ async function generateQuiz(topic, difficulty, nbQuestions = 5) {
         const qCount = Math.max(QUIZ_MIN_QUESTIONS, Math.min(QUIZ_MAX_QUESTIONS, nbQuestions)); // Sécurité : borné entre min et max
         const userMessage = `Génère EXACTEMENT ${qCount} questions (ni plus, ni moins) de niveau ${difficulty} sur le sujet : ${topic}.\nTon tableau JSON doit contenir EXACTEMENT ${qCount} objets.`;
 
-        const completion = await client.chat.completions.create({
-            model: AI_MODEL,
-            messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
-                { role: 'user', content: userMessage }
-            ]
-        });
-
-        const rawContent = completion.choices[0].message.content;
+        const rawContent = await callAI([
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userMessage },
+        ]);
         const start = rawContent.indexOf('[');
         const end = rawContent.lastIndexOf(']');
         if (start === -1 || end === -1) throw new Error("Aucun JSON valide");
@@ -182,12 +199,7 @@ async function aiAssist(type, context, difficulty = "Moyen", existingQuestions =
             `;
         }
 
-        const completion = await client.chat.completions.create({
-            model: AI_MODEL,
-            messages: [{ role: 'user', content: prompt }]
-        });
-
-        const rawContent = completion.choices[0].message.content;
+        const rawContent = await callAI([{ role: 'user', content: prompt }]);
         console.log("🤖 Réponse IA Assist :", rawContent);
 
         // Nettoyage JSON

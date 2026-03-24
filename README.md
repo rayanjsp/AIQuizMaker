@@ -30,11 +30,13 @@ Le projet supporte plusieurs fournisseurs IA interchangeables. Il suffit de déf
 | **Groq** | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | **Oui (free tier)** |
 | **Mistral AI** | `mistral` | `MISTRAL_API_KEY` | `mistral-small-latest` | Peu cher |
 | **Together AI** | `together` | `TOGETHER_API_KEY` | `meta-llama/Llama-3-8b-chat-hf` | Crédits offerts |
+| **Grok (xAI)** | `grok` | `XAI_API_KEY` | `grok-2-latest` | Payant |
+| **Anthropic** | `anthropic` | `ANTHROPIC_API_KEY` | `claude-3-5-haiku-latest` | Payant |
 | **Custom** | `custom` | `AI_API_KEY` | via `AI_MODEL` | Selon provider |
 
 > **Custom** permet d'utiliser n'importe quel provider compatible OpenAI (LM Studio, Ollama, Mistral local…) en définissant `AI_BASE_URL`, `AI_API_KEY` et `AI_MODEL` dans le `.env`.
 
-**Ordre d'auto-détection** (si `AI_PROVIDER` non défini) : DeepSeek → OpenAI → OpenRouter → Groq → Mistral → Together
+**Ordre d'auto-détection** (si `AI_PROVIDER` non défini) : DeepSeek → OpenAI → OpenRouter → Groq → Mistral → Together → Grok → Anthropic
 
 ---
 
@@ -598,13 +600,15 @@ Toutes les variables sont définies dans `server/.env`.
 | `DATABASE_URL` | **Oui** | `mysql://root:@localhost:3306/aiquizmaker` | URL de connexion MySQL (format Prisma) |
 | `JWT_SECRET` | **Oui** | `une_phrase_secrete` | Secret pour signer les tokens JWT |
 | `FRONTEND_URL` | **Oui** | `http://localhost:5173` | URL du frontend (utilisé pour CORS) |
-| `AI_PROVIDER` | Non | `groq` | Provider IA (`deepseek`, `openai`, `openrouter`, `groq`, `mistral`, `together`, `custom`). Auto-détecté si absent. |
+| `AI_PROVIDER` | Non | `groq` | Provider IA (`deepseek`, `openai`, `openrouter`, `groq`, `mistral`, `together`, `grok`, `anthropic`, `custom`). Auto-détecté si absent. |
 | `DEEPSEEK_API_KEY` | Conditionnelle | `sk-xxxx` | Clé DeepSeek |
 | `OPENAI_API_KEY` | Conditionnelle | `sk-xxxx` | Clé OpenAI |
 | `OPENROUTER_API_KEY` | Conditionnelle | `sk-or-xxxx` | Clé OpenRouter |
 | `GROQ_API_KEY` | Conditionnelle | `gsk_xxxx` | Clé Groq |
 | `MISTRAL_API_KEY` | Conditionnelle | `xxxx` | Clé Mistral AI |
 | `TOGETHER_API_KEY` | Conditionnelle | `xxxx` | Clé Together AI |
+| `XAI_API_KEY` | Conditionnelle | `xxxx` | Clé xAI (Grok) |
+| `ANTHROPIC_API_KEY` | Conditionnelle | `sk-ant-xxxx` | Clé Anthropic (Claude) |
 | `OPENROUTER_MODEL` | Non | `mistralai/mistral-7b-instruct` | Surcharge le modèle OpenRouter |
 | `AI_API_KEY` | Si custom | `xxxx` | Clé API pour provider custom |
 | `AI_BASE_URL` | Si custom | `http://localhost:11434/v1` | URL base du provider custom (ex: Ollama) |
