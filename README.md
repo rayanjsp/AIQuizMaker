@@ -33,7 +33,7 @@ graph LR
 
     subgraph Data["Données"]
         DB[(MySQL)]
-        AI[API IA (DeepSeek / OpenAI / OpenRouter)]
+        AI["API IA (DeepSeek / OpenAI / OpenRouter)"]
     end
 
     FE -->|"HTTP /api"| MW
