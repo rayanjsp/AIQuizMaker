@@ -1,6 +1,6 @@
 # AIQuizMaker
 
-Application web full-stack de génération de quiz par IA. L'utilisateur saisit un sujet, l'IA (DeepSeek) génère un QCM complet, exportable en PDF et partageable publiquement via un lien unique.
+Application web full-stack de génération de quiz par IA. L'utilisateur saisit un sujet, l'IA génère un QCM complet, exportable en PDF et partageable publiquement via un lien unique.
 
 **Projet BTS SIO SLAM — 2025/2026**
 
@@ -8,13 +8,33 @@ Application web full-stack de génération de quiz par IA. L'utilisateur saisit 
 
 ## Fonctionnalités
 
-- **Génération automatique de quiz** via l'IA DeepSeek (sujet, difficulté, nombre de questions)
+- **Génération automatique de quiz** via l'IA de ton choix (sujet, difficulté, nombre de questions)
 - **Édition manuelle** des questions et options, avec assistance IA
 - **Jeu interactif** : quiz jouable en ligne avec score immédiat
 - **Partage public** via un lien UUID (joueurs anonymes avec pseudo)
 - **Export PDF** : feuille de test vierge ou corrigée avec explications
 - **Historique des résultats** : scores des utilisateurs connectés et des invités
 - **Tableau de bord** : gestion des quiz avec recherche en temps réel
+
+---
+
+## Fournisseurs IA compatibles
+
+Le projet supporte plusieurs fournisseurs IA interchangeables. Il suffit de définir la clé correspondante dans `server/.env` — le fournisseur est **détecté automatiquement**, ou sélectionné via `AI_PROVIDER`.
+
+| Fournisseur | `AI_PROVIDER` | Clé requise | Modèle par défaut | Gratuit ? |
+|---|---|---|---|---|
+| **DeepSeek** | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat` | Très peu cher |
+| **OpenAI** | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | Payant |
+| **OpenRouter** | `openrouter` | `OPENROUTER_API_KEY` | `meta-llama/llama-3.3-8b-instruct:free` | **Oui (modèles gratuits)** |
+| **Groq** | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | **Oui (free tier)** |
+| **Mistral AI** | `mistral` | `MISTRAL_API_KEY` | `mistral-small-latest` | Peu cher |
+| **Together AI** | `together` | `TOGETHER_API_KEY` | `meta-llama/Llama-3-8b-chat-hf` | Crédits offerts |
+| **Custom** | `custom` | `AI_API_KEY` | via `AI_MODEL` | Selon provider |
+
+> **Custom** permet d'utiliser n'importe quel provider compatible OpenAI (LM Studio, Ollama, Mistral local…) en définissant `AI_BASE_URL`, `AI_API_KEY` et `AI_MODEL` dans le `.env`.
+
+**Ordre d'auto-détection** (si `AI_PROVIDER` non défini) : DeepSeek → OpenAI → OpenRouter → Groq → Mistral → Together
 
 ---
 
@@ -116,7 +136,7 @@ flowchart TD
 
 - **Node.js** v20.19.0 ou ≥ 22.12.0
 - **MySQL** 5.7+ (local ou distant)
-- **Clé API IA** — au choix : [DeepSeek](https://platform.deepseek.com), [OpenAI](https://platform.openai.com) ou [OpenRouter](https://openrouter.ai) (modèles gratuits disponibles)
+- **Clé API IA** — au choix parmi les providers listés ci-dessus (voir section **Fournisseurs IA compatibles**)
 
 ---
 
@@ -485,16 +505,9 @@ sequenceDiagram
 
 ### Fournisseur IA
 
-Le fournisseur actif est sélectionné via la variable `AI_PROVIDER` (ou auto-détecté selon la clé présente).
-Les trois fournisseurs utilisent le SDK OpenAI — seuls `baseURL` et `apiKey` varient.
+Voir la section **[Fournisseurs IA compatibles](#fournisseurs-ia-compatibles)** en tête de document pour le tableau complet des providers et leurs clés.
 
-| Fournisseur | `AI_PROVIDER` | `baseURL` | Modèle par défaut |
-|---|---|---|---|
-| DeepSeek | `deepseek` | `https://api.deepseek.com` | `deepseek-chat` |
-| OpenAI | `openai` | *(standard)* | `gpt-4o-mini` |
-| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` | `meta-llama/llama-3.3-8b-instruct:free` |
-
-La sélection du fournisseur est validée au démarrage : si `AI_PROVIDER` est défini mais que la clé correspondante est absente, le serveur refuse de démarrer avec un message d'erreur explicite.
+Tous les fournisseurs utilisent le SDK OpenAI (compatible OpenAI) — seuls `baseURL` et `apiKey` varient. La configuration est validée au démarrage du serveur avec des messages d'erreur explicites.
 
 ### Prompt système
 Le modèle est forcé à répondre en **JSON strict** avec le format :
@@ -585,11 +598,17 @@ Toutes les variables sont définies dans `server/.env`.
 | `DATABASE_URL` | **Oui** | `mysql://root:@localhost:3306/aiquizmaker` | URL de connexion MySQL (format Prisma) |
 | `JWT_SECRET` | **Oui** | `une_phrase_secrete` | Secret pour signer les tokens JWT |
 | `FRONTEND_URL` | **Oui** | `http://localhost:5173` | URL du frontend (utilisé pour CORS) |
-| `AI_PROVIDER` | Non | `openrouter` | Fournisseur IA actif (`deepseek`, `openai`, `openrouter`). Si absent, auto-détecté selon la clé présente. |
-| `DEEPSEEK_API_KEY` | Conditionnelle | `sk-xxxx` | Clé DeepSeek — obligatoire si `AI_PROVIDER=deepseek` |
-| `OPENAI_API_KEY` | Conditionnelle | `sk-xxxx` | Clé OpenAI — obligatoire si `AI_PROVIDER=openai` |
-| `OPENROUTER_API_KEY` | Conditionnelle | `sk-or-xxxx` | Clé OpenRouter — obligatoire si `AI_PROVIDER=openrouter` |
-| `OPENROUTER_MODEL` | Non | `mistralai/mistral-7b-instruct` | Surcharge le modèle OpenRouter (défaut : `meta-llama/llama-3.3-8b-instruct:free`) |
+| `AI_PROVIDER` | Non | `groq` | Provider IA (`deepseek`, `openai`, `openrouter`, `groq`, `mistral`, `together`, `custom`). Auto-détecté si absent. |
+| `DEEPSEEK_API_KEY` | Conditionnelle | `sk-xxxx` | Clé DeepSeek |
+| `OPENAI_API_KEY` | Conditionnelle | `sk-xxxx` | Clé OpenAI |
+| `OPENROUTER_API_KEY` | Conditionnelle | `sk-or-xxxx` | Clé OpenRouter |
+| `GROQ_API_KEY` | Conditionnelle | `gsk_xxxx` | Clé Groq |
+| `MISTRAL_API_KEY` | Conditionnelle | `xxxx` | Clé Mistral AI |
+| `TOGETHER_API_KEY` | Conditionnelle | `xxxx` | Clé Together AI |
+| `OPENROUTER_MODEL` | Non | `mistralai/mistral-7b-instruct` | Surcharge le modèle OpenRouter |
+| `AI_API_KEY` | Si custom | `xxxx` | Clé API pour provider custom |
+| `AI_BASE_URL` | Si custom | `http://localhost:11434/v1` | URL base du provider custom (ex: Ollama) |
+| `AI_MODEL` | Si custom | `llama3` | Modèle pour provider custom |
 
 ---
 

@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const { PROVIDER_CONFIG, VALID_PROVIDERS, QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } = require('../config/constants');
+const { PROVIDER_CONFIG, VALID_PROVIDERS, AUTO_DETECT_PROVIDERS, QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } = require('../config/constants');
 
 // --- RÉSOLUTION DU FOURNISSEUR IA ---
 function resolveProvider() {
@@ -8,14 +8,22 @@ function resolveProvider() {
     if (requested) {
         if (!VALID_PROVIDERS.includes(requested))
             throw new Error(`[aiService] AI_PROVIDER="${requested}" invalide. Valeurs acceptées : ${VALID_PROVIDERS.join(', ')}`);
+
+        if (requested === 'custom') {
+            if (!process.env.AI_API_KEY)  throw new Error('[aiService] AI_PROVIDER=custom mais AI_API_KEY est absent du .env');
+            if (!process.env.AI_BASE_URL) throw new Error('[aiService] AI_PROVIDER=custom mais AI_BASE_URL est absent du .env');
+            if (!process.env.AI_MODEL)    throw new Error('[aiService] AI_PROVIDER=custom mais AI_MODEL est absent du .env');
+            return 'custom';
+        }
+
         const cfg = PROVIDER_CONFIG[requested];
         if (!process.env[cfg.envKey])
             throw new Error(`[aiService] AI_PROVIDER="${requested}" mais ${cfg.envKey} est absent du fichier .env`);
         return requested;
     }
 
-    // Auto-détection : première clé présente dans l'ordre deepseek > openai > openrouter
-    for (const name of VALID_PROVIDERS) {
+    // Auto-détection : première clé présente parmi les providers standards
+    for (const name of AUTO_DETECT_PROVIDERS) {
         if (process.env[PROVIDER_CONFIG[name].envKey]) {
             console.log(`[aiService] AI_PROVIDER non défini — fournisseur auto-détecté : ${name}`);
             return name;
@@ -29,13 +37,23 @@ function resolveProvider() {
 const PROVIDER_NAME = resolveProvider();
 const cfg = PROVIDER_CONFIG[PROVIDER_NAME];
 
-// OPENROUTER_MODEL n'a d'effet que si PROVIDER_NAME === 'openrouter'
-const AI_MODEL = (PROVIDER_NAME === 'openrouter' && process.env.OPENROUTER_MODEL)
-    ? process.env.OPENROUTER_MODEL
-    : cfg.defaultModel;
+// Résolution du modèle selon le provider
+let AI_MODEL;
+if (PROVIDER_NAME === 'custom') {
+    AI_MODEL = process.env.AI_MODEL;
+} else if (PROVIDER_NAME === 'openrouter' && process.env.OPENROUTER_MODEL) {
+    AI_MODEL = process.env.OPENROUTER_MODEL;
+} else {
+    AI_MODEL = cfg.defaultModel;
+}
 
+// Construction des options client
 const clientOptions = { apiKey: process.env[cfg.envKey] };
-if (cfg.baseURL) clientOptions.baseURL = cfg.baseURL;
+if (PROVIDER_NAME === 'custom') {
+    clientOptions.baseURL = process.env.AI_BASE_URL;
+} else if (cfg.baseURL) {
+    clientOptions.baseURL = cfg.baseURL;
+}
 // Pour OpenAI : baseURL est null → le SDK utilise l'URL standard
 
 const client = new OpenAI(clientOptions);
@@ -84,8 +102,7 @@ async function generateQuiz(topic, difficulty, nbQuestions = 5) {
         console.log(`[aiService] Envoi à ${PROVIDER_NAME} (${AI_MODEL}) : ${topic} (${difficulty}) - ${nbQuestions} questions`);
 
         const qCount = Math.max(QUIZ_MIN_QUESTIONS, Math.min(QUIZ_MAX_QUESTIONS, nbQuestions)); // Sécurité : borné entre min et max
-        const instruction = `Génère un quiz de ${qCount} questions (Niveau ${difficulty})`;
-        const userMessage = `${instruction} sur le sujet : ${topic}`;
+        const userMessage = `Génère EXACTEMENT ${qCount} questions (ni plus, ni moins) de niveau ${difficulty} sur le sujet : ${topic}.\nTon tableau JSON doit contenir EXACTEMENT ${qCount} objets.`;
 
         const completion = await client.chat.completions.create({
             model: AI_MODEL,
@@ -101,10 +118,13 @@ async function generateQuiz(topic, difficulty, nbQuestions = 5) {
         if (start === -1 || end === -1) throw new Error("Aucun JSON valide");
         const cleanJson = rawContent.substring(start, end + 1);
         const quizData = JSON.parse(cleanJson);
-        if (Array.isArray(quizData)) {
-            quizData.forEach(q => q.options && (q.options = shuffleArray(q.options)));
+        if (!Array.isArray(quizData)) throw new Error("La réponse IA n'est pas un tableau");
+        if (quizData.length !== qCount) {
+            console.warn(`⚠️ IA a retourné ${quizData.length} questions au lieu de ${qCount}`);
         }
-        return quizData;
+        const finalData = quizData.slice(0, qCount);
+        finalData.forEach(q => q.options && (q.options = shuffleArray(q.options)));
+        return finalData;
 
     } catch (error) {
         console.error("❌ Erreur IA :", error);

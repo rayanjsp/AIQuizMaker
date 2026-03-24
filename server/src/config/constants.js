@@ -6,8 +6,15 @@ module.exports = {
     deepseek:   { baseURL: 'https://api.deepseek.com',         defaultModel: 'deepseek-chat',                         envKey: 'DEEPSEEK_API_KEY' },
     openai:     { baseURL: null,                                defaultModel: 'gpt-4o-mini',                           envKey: 'OPENAI_API_KEY' },
     openrouter: { baseURL: 'https://openrouter.ai/api/v1',     defaultModel: 'meta-llama/llama-3.3-8b-instruct:free', envKey: 'OPENROUTER_API_KEY' },
+    groq:       { baseURL: 'https://api.groq.com/openai/v1',   defaultModel: 'llama-3.3-70b-versatile',               envKey: 'GROQ_API_KEY' },
+    mistral:    { baseURL: 'https://api.mistral.ai/v1',        defaultModel: 'mistral-small-latest',                  envKey: 'MISTRAL_API_KEY' },
+    together:   { baseURL: 'https://api.together.xyz/v1',      defaultModel: 'meta-llama/Llama-3-8b-chat-hf',         envKey: 'TOGETHER_API_KEY' },
+    // custom : n'importe quel provider compatible OpenAI — voir AI_BASE_URL, AI_API_KEY, AI_MODEL dans .env
+    custom:     { baseURL: null,                                defaultModel: null,                                    envKey: 'AI_API_KEY' },
   },
-  VALID_PROVIDERS: ['deepseek', 'openai', 'openrouter'],
+  VALID_PROVIDERS: ['deepseek', 'openai', 'openrouter', 'groq', 'mistral', 'together', 'custom'],
+  // Providers inclus dans l'auto-détection (custom exclu car nécessite AI_BASE_URL et AI_MODEL)
+  AUTO_DETECT_PROVIDERS: ['deepseek', 'openai', 'openrouter', 'groq', 'mistral', 'together'],
   RATE_LIMIT_AUTH: { windowMs: 15 * 60 * 1000, max: 10 },
   RATE_LIMIT_GENERATE: { windowMs: 60 * 60 * 1000, max: 20 },
 };
