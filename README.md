@@ -23,10 +23,7 @@ Application web full-stack de génération de quiz par IA. L'utilisateur saisit 
 ```mermaid
 graph LR
     subgraph Client["Frontend — Vue 3 (port 5173)"]
-        R[Router] --> V[Views]
-        V --> CO[Components]
-        CO --> ST[Pinia Store]
-        ST --> UA[useApi / useAuth]
+        FE[Interface utilisateur]
     end
 
     subgraph Server["Backend — Express (port 3000)"]
@@ -39,7 +36,7 @@ graph LR
         AI[DeepSeek API]
     end
 
-    UA -->|"HTTP /api (proxy Vite)"| MW
+    FE -->|"HTTP /api"| MW
     SV -->|Prisma ORM| DB
     SV -->|OpenAI SDK| AI
 ```
