@@ -1,6 +1,6 @@
 const prisma = require('../config/prisma');
 const { generateQuiz, aiAssist } = require('../services/aiService');
-const { buildPDF } = require('../services/pdfService');
+const { buildPDF, buildPersonnalisedPDF } = require('../services/pdfService');
 const { QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } = require('../config/constants');
 
 // --- HELPER : parse et valider un ID entier depuis les params ---
@@ -25,7 +25,7 @@ exports.requireQuizOwner = requireQuizOwner;
 
 exports.createQuiz = async (req, res) => {
     try {
-        const { topic, difficulty, nbQuestions } = req.body;
+        const { topic, difficulty, nbQuestions, mode, scoreConfig } = req.body;
         const userId = req.user.userId;
 
         // Validation des inputs
@@ -40,8 +40,11 @@ exports.createQuiz = async (req, res) => {
             });
         }
 
+        const quizMode = mode === 'expert' ? 'expert' : 'standard';
+        const quizScoreConfig = quizMode === 'expert' ? (scoreConfig || { pointsUnique: 1, pointsMulti: 2 }) : null;
+
         // 1. Appeler l'IA
-        const quizData = await generateQuiz(topic, difficulty, nb);
+        const quizData = await generateQuiz(topic, difficulty, nb, quizMode, quizScoreConfig);
 
         // 2. Sauvegarder dans la BDD
         const newQuiz = await prisma.quiz.create({
@@ -49,11 +52,14 @@ exports.createQuiz = async (req, res) => {
                 title: `Quiz sur ${topic}`,
                 topic: topic,
                 difficulty: difficulty,
+                mode: quizMode,
+                scoreConfig: quizScoreConfig,
                 userId: userId,
                 questions: {
                     create: quizData.map((q) => ({
                         text: q.text,
                         explanation: q.explanation,
+                        pointValue: q.pointValue ?? 1,
                         options: {
                             create: q.options.map((o) => ({
                                 text: o.text,
@@ -205,10 +211,6 @@ exports.getPublicQuiz = async (req, res) => {
             return res.status(404).json({ error: "Ce quiz n'existe pas ou n'est plus accessible." });
         }
 
-        quiz.questions = quiz.questions.map(q => ({
-            ...q,
-            options: q.options.map(({ isCorrect, ...o }) => o)
-        }));
         res.json(quiz);
     } catch (error) {
         res.status(500).json({ error: "Erreur chargement quiz" });
@@ -218,7 +220,7 @@ exports.getPublicQuiz = async (req, res) => {
 exports.submitPublicScore = async (req, res) => {
     try {
         const { uuid } = req.params;
-        const { score, total, pseudo } = req.body;
+        const { score, total, pseudo, comments } = req.body;
 
         // Validation des inputs
         if (!pseudo || !pseudo.trim()) {
@@ -241,7 +243,7 @@ exports.submitPublicScore = async (req, res) => {
 
         if (!quiz) return res.status(404).json({ error: "Quiz introuvable" });
 
-        await prisma.result.create({
+        const result = await prisma.result.create({
             data: {
                 quizId: quiz.id,
                 score: score,
@@ -251,10 +253,162 @@ exports.submitPublicScore = async (req, res) => {
             }
         });
 
-        res.json({ message: "Score enregistré !" });
+        if (Array.isArray(comments) && comments.length > 0) {
+            const validComments = comments.filter(c => c.comment && c.comment.trim());
+            if (validComments.length > 0) {
+                await prisma.resultComment.createMany({
+                    data: validComments.map(c => ({
+                        resultId: result.id,
+                        questionId: c.questionId,
+                        comment: c.comment.trim(),
+                    }))
+                });
+            }
+        }
+
+        res.json({ message: "Score enregistré !", resultId: result.id });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Erreur sauvegarde score" });
+    }
+};
+
+// Soumettre un score (quiz privé, utilisateur connecté) + commentaires optionnels
+exports.submitPrivateScore = async (req, res) => {
+    try {
+        const { score, totalQuestions, comments } = req.body;
+
+        if (typeof score !== 'number' || typeof totalQuestions !== 'number') {
+            return res.status(400).json({ error: 'score et totalQuestions doivent être des nombres' });
+        }
+
+        const result = await prisma.result.create({
+            data: {
+                quizId: req.quiz.id,
+                userId: req.user.userId,
+                score,
+                totalQuestions,
+            }
+        });
+
+        if (Array.isArray(comments) && comments.length > 0) {
+            const validComments = comments.filter(c => c.comment && c.comment.trim());
+            if (validComments.length > 0) {
+                await prisma.resultComment.createMany({
+                    data: validComments.map(c => ({
+                        resultId: result.id,
+                        questionId: c.questionId,
+                        comment: c.comment.trim(),
+                    }))
+                });
+            }
+        }
+
+        res.status(201).json({ resultId: result.id });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erreur sauvegarde résultat' });
+    }
+};
+
+// Télécharger le PDF personnalisé (corrigé + notes de l'utilisateur)
+exports.downloadPersonalisedPdf = async (req, res) => {
+    try {
+        const resultId = parseInt(req.query.resultId);
+        if (isNaN(resultId)) return res.status(400).json({ error: 'resultId invalide' });
+
+        const result = await prisma.result.findUnique({
+            where: { id: resultId },
+            include: { comments: true }
+        });
+
+        if (!result) return res.status(404).json({ error: 'Résultat introuvable' });
+        if (result.quizId !== req.quiz.id) return res.status(403).json({ error: 'Accès refusé' });
+
+        const quiz = await prisma.quiz.findUnique({
+            where: { id: req.quiz.id },
+            include: { questions: { include: { options: true } } }
+        });
+
+        const buffer = await buildPersonnalisedPDF(quiz, result.comments);
+        const filename = `quiz_${quiz.id}_correction_personnalisee.pdf`;
+        res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-type', 'application/pdf');
+        res.send(buffer);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Erreur génération PDF personnalisé');
+    }
+};
+
+// Sauvegarder les commentaires sur un résultat public existant
+exports.savePublicComments = async (req, res) => {
+    try {
+        const { uuid } = req.params;
+        const { resultId, comments } = req.body;
+
+        if (!resultId || !Array.isArray(comments)) {
+            return res.status(400).json({ error: 'resultId et comments sont requis' });
+        }
+
+        const quiz = await prisma.quiz.findUnique({ where: { publicId: uuid } });
+        if (!quiz || !quiz.isPublic) return res.status(404).json({ error: 'Quiz introuvable' });
+
+        const result = await prisma.result.findUnique({ where: { id: resultId } });
+        if (!result || result.quizId !== quiz.id) return res.status(404).json({ error: 'Résultat introuvable' });
+
+        // Remplace les commentaires existants pour ce résultat
+        await prisma.resultComment.deleteMany({ where: { resultId } });
+
+        const validComments = comments.filter(c => c.comment && c.comment.trim());
+        if (validComments.length > 0) {
+            await prisma.resultComment.createMany({
+                data: validComments.map(c => ({
+                    resultId,
+                    questionId: c.questionId,
+                    comment: c.comment.trim(),
+                }))
+            });
+        }
+
+        res.json({ ok: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erreur sauvegarde commentaires' });
+    }
+};
+
+// Télécharger le PDF personnalisé depuis la vue publique (sans auth)
+exports.downloadPublicPersonalisedPdf = async (req, res) => {
+    try {
+        const { uuid } = req.params;
+        const resultId = parseInt(req.query.resultId);
+        if (isNaN(resultId)) return res.status(400).json({ error: 'resultId invalide' });
+
+        const quiz = await prisma.quiz.findUnique({
+            where: { publicId: uuid },
+            include: { questions: { include: { options: true } } }
+        });
+
+        if (!quiz || !quiz.isPublic) return res.status(404).json({ error: 'Quiz introuvable' });
+
+        const result = await prisma.result.findUnique({
+            where: { id: resultId },
+            include: { comments: true }
+        });
+
+        if (!result || result.quizId !== quiz.id) return res.status(404).json({ error: 'Résultat introuvable' });
+
+        const buffer = await buildPersonnalisedPDF(quiz, result.comments);
+        const filename = `quiz_${quiz.id}_correction_personnalisee.pdf`;
+        res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-type', 'application/pdf');
+        res.send(buffer);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Erreur génération PDF personnalisé');
     }
 };
 

@@ -28,6 +28,8 @@ model Quiz {
   title       String
   topic       String
   difficulty  String
+  mode        String   @default("standard")
+  scoreConfig Json?
 
   publicId    String   @unique @default(uuid())
   isPublic    Boolean  @default(false)
@@ -45,12 +47,14 @@ model Quiz {
 model Question {
   id          Int      @id @default(autoincrement())
   text        String   @db.Text
-  explanation String?  @db.Text // Explication générée par DeepSeek pour la correction
+  explanation String?  @db.Text // Explication générée par l'IA pour la correction
+  pointValue  Int      @default(1)
 
   quizId      Int
   quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
-  options     Option[]
+  options        Option[]
+  resultComments ResultComment[]
 }
 
 // --- 4. LES RÉPONSES ---
@@ -78,4 +82,18 @@ model Result {
 
   quizId         Int
   quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  comments       ResultComment[]
+}
+
+// --- 6. COMMENTAIRES PERSONNELS SUR UN RÉSULTAT ---
+model ResultComment {
+  id         Int      @id @default(autoincrement())
+  comment    String   @db.Text
+
+  questionId Int
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  resultId   Int
+  result     Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
 }

@@ -99,4 +99,99 @@ function buildPDF(quiz, withAnswers = false) {
     });
 }
 
-module.exports = { buildPDF };
+/**
+ * Génère un PDF de correction avec les commentaires personnels de l'utilisateur.
+ * @param {Object} quiz - quiz avec questions et options
+ * @param {Array} comments - [{ questionId, comment }]
+ */
+function buildPersonnalisedPDF(quiz, comments = []) {
+    const commentMap = {};
+    for (const c of comments) {
+        if (c.comment && c.comment.trim()) {
+            commentMap[c.questionId] = c.comment.trim();
+        }
+    }
+
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument({
+            margin: 30,
+            size: 'A4',
+            bufferPages: true,
+            autoFirstPage: true
+        });
+
+        const chunks = [];
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        // --- EN-TÊTE ---
+        doc.font('Helvetica-Bold').fontSize(18).fillColor('#000000')
+            .text(`${quiz.title} — Corrigé personnalisé`, { align: 'center' });
+
+        doc.moveDown(0.5);
+        doc.moveTo(30, doc.y).lineTo(565, doc.y).lineWidth(0.5).strokeColor('#9ca3af').stroke();
+        doc.moveDown(1);
+
+        // --- CORPS ---
+        quiz.questions.forEach((q, index) => {
+            const spaceRemaining = doc.page.height - doc.y - doc.page.margins.bottom;
+            if (spaceRemaining < 100) doc.addPage();
+
+            // Question
+            doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000')
+                .text(`${index + 1}. ${q.text}`, { width: 535 });
+            doc.moveDown(0.3);
+
+            // Options
+            doc.font('Helvetica').fontSize(10);
+            q.options.forEach((opt, i) => {
+                const letter = String.fromCharCode(65 + i);
+                let prefix = opt.isCorrect ? `[X] ${letter}.` : `( ) ${letter}.`;
+                let font = opt.isCorrect ? 'Helvetica-Bold' : 'Helvetica';
+                let textColor = opt.isCorrect ? '#000000' : '#6b7280';
+
+                if (doc.y > doc.page.height - 50) doc.addPage();
+                doc.font(font).fillColor(textColor).text(`${prefix} ${opt.text}`, { indent: 15 });
+                doc.moveDown(0.2);
+            });
+
+            // Explication
+            if (q.explanation) {
+                doc.moveDown(0.3);
+                if (doc.y > doc.page.height - 60) doc.addPage();
+                doc.font('Helvetica-Bold').fontSize(8).fillColor('#2563eb')
+                    .text('Explication :', 15, doc.y, { width: 535 });
+                doc.moveDown(0.15);
+                doc.font('Helvetica-Oblique').fontSize(9).fillColor('#1d4ed8')
+                    .text(q.explanation, 15, doc.y, { width: 535, lineBreak: true });
+            }
+
+            // Commentaire personnel
+            const userComment = commentMap[q.id];
+            if (userComment) {
+                doc.moveDown(0.4);
+                if (doc.y > doc.page.height - 60) doc.addPage();
+                doc.font('Helvetica-Bold').fontSize(8).fillColor('#7c3aed')
+                    .text('Note personnelle :', 15, doc.y, { width: 535 });
+                doc.moveDown(0.15);
+                doc.font('Helvetica-Oblique').fontSize(9).fillColor('#6d28d9')
+                    .text(userComment, 15, doc.y, { width: 535, lineBreak: true });
+            }
+
+            if (index < quiz.questions.length - 1) doc.moveDown(1.2);
+        });
+
+        // --- PIED DE PAGE ---
+        const range = doc.bufferedPageRange();
+        for (let i = range.start; i < range.start + range.count; i++) {
+            doc.switchToPage(i);
+            doc.fontSize(8).fillColor('#9ca3af')
+                .text(`${i + 1} / ${range.count}`, 530, 790, { align: 'right' });
+        }
+
+        doc.end();
+    });
+}
+
+module.exports = { buildPDF, buildPersonnalisedPDF };

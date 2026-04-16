@@ -1,5 +1,4 @@
 const mockDoc = {
-    pipe: jest.fn(),
     font: jest.fn().mockReturnThis(),
     fontSize: jest.fn().mockReturnThis(),
     fillColor: jest.fn().mockReturnThis(),
@@ -13,64 +12,61 @@ const mockDoc = {
     addPage: jest.fn().mockReturnThis(),
     switchToPage: jest.fn().mockReturnThis(),
     bufferedPageRange: jest.fn().mockReturnValue({ start: 0, count: 1 }),
+    on: jest.fn(),
     end: jest.fn(),
     page: { height: 841, margins: { bottom: 30 } },
     y: 100
 };
 
 jest.mock('pdfkit', () => {
-    return jest.fn().mockImplementation(() => mockDoc);
+    return jest.fn().mockImplementation(() => {
+        mockDoc.on.mockImplementation((event, cb) => {
+            if (event === 'end') setTimeout(cb, 0);
+        });
+        return mockDoc;
+    });
 });
 
 const { buildPDF } = require('../src/services/pdfService');
 
-describe('pdfService', () => {
-    let res;
-
+describe('pdfService — buildPDF', () => {
     beforeEach(() => {
-        res = {
-            setHeader: jest.fn(),
-            status: jest.fn().mockReturnThis(),
-            send: jest.fn()
-        };
         jest.clearAllMocks();
+        mockDoc.on.mockImplementation((event, cb) => {
+            if (event === 'end') setTimeout(cb, 0);
+        });
     });
 
-    it('should generate a PDF and pipe it to response', () => {
+    it('génère un PDF et retourne un Buffer', async () => {
         const mockQuiz = {
             title: 'Test Quiz',
             questions: [
-                {
-                    text: 'Q1',
-                    options: [{ text: 'O1', isCorrect: true }]
-                }
+                { text: 'Q1', options: [{ text: 'O1', isCorrect: true }] }
             ]
         };
 
-        buildPDF(mockQuiz, res);
+        const result = await buildPDF(mockQuiz, false);
 
-        expect(res.setHeader).toHaveBeenCalledWith('Content-type', 'application/pdf');
-        expect(mockDoc.pipe).toHaveBeenCalledWith(res);
+        expect(result).toBeInstanceOf(Buffer);
         expect(mockDoc.text).toHaveBeenCalledWith('Test Quiz', expect.anything());
         expect(mockDoc.end).toHaveBeenCalled();
     });
 
-     it('should generate a PDF with answers', () => {
+    it('affiche les bonnes réponses si withAnswers = true', async () => {
         const mockQuiz = {
             title: 'Test Quiz',
             questions: [
                 {
                     text: 'Q1',
-                    options: [{ text: 'O1', isCorrect: true }],
-                    explanation: 'Exp'
+                    options: [{ text: 'Réponse correcte', isCorrect: true }],
+                    explanation: 'Explication'
                 }
             ]
         };
 
-        buildPDF(mockQuiz, res, true);
+        await buildPDF(mockQuiz, true);
 
-        // Text might be called multiple times, we check if one call contains the expected text
-        expect(mockDoc.text).toHaveBeenCalledWith(expect.stringContaining('Q1'), expect.anything());
-        expect(mockDoc.text).toHaveBeenCalledWith(expect.stringContaining('Note : Exp'), expect.anything(), expect.anything(), expect.anything());
+        const allTextCalls = mockDoc.text.mock.calls.map(args => args[0]).filter(t => typeof t === 'string');
+        expect(allTextCalls.some(t => t.includes('Note : Explication'))).toBe(true);
     });
 });

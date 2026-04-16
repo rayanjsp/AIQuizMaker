@@ -11,6 +11,8 @@ router.post('/assist', authMiddleware, quizController.askAiAssist);
 // Routes publiques (pas d'authMiddleware)
 router.get('/public/:uuid', quizController.getPublicQuiz);
 router.post('/public/:uuid/submit', quizController.submitPublicScore);
+router.get('/public/:uuid/pdf-personnalise', quizController.downloadPublicPersonalisedPdf);
+router.post('/public/:uuid/comments', quizController.savePublicComments);
 
 // Routes nécessitant la propriété du quiz
 router.patch('/:id/toggle-public', authMiddleware, requireQuizOwner, quizController.togglePublic);
@@ -19,5 +21,7 @@ router.delete('/:id', authMiddleware, requireQuizOwner, quizController.deleteQui
 router.put('/:id', authMiddleware, requireQuizOwner, quizController.updateQuiz);
 router.get('/:id/pdf', authMiddleware, requireQuizOwner, quizController.downloadPdf);
 router.get('/:id/pdf-correction', authMiddleware, requireQuizOwner, quizController.downloadPdf);
+router.post('/:id/submit', authMiddleware, requireQuizOwner, quizController.submitPrivateScore);
+router.get('/:id/pdf-personnalise', authMiddleware, requireQuizOwner, quizController.downloadPersonalisedPdf);
 
 module.exports = router;

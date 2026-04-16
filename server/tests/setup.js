@@ -1,4 +1,5 @@
 process.env.DEEPSEEK_API_KEY = 'dummy_key';
+process.env.JWT_SECRET = 'test-secret';
 const { mockDeep, mockReset } = require('jest-mock-extended');
 
 const prismaMock = mockDeep();

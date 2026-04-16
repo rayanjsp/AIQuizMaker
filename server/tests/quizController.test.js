@@ -56,7 +56,8 @@ describe('quizController', () => {
 
             await createQuiz(req, res);
 
-            expect(generateQuiz).toHaveBeenCalledWith('Math', 'Easy', null, 5);
+            // Signature : (topic, difficulty, nb, mode, scoreConfig)
+            expect(generateQuiz).toHaveBeenCalledWith('Math', 'Easy', 5, 'standard', null);
             expect(prismaMock.quiz.create).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(201);
         });
@@ -64,8 +65,8 @@ describe('quizController', () => {
 
     describe('deleteQuiz', () => {
         it('should delete a quiz if it belongs to the user', async () => {
-            req.params.id = '1';
-            prismaMock.quiz.count.mockResolvedValue(1);
+            // requireQuizOwner met req.quiz en place — on le simule ici
+            req.quiz = { id: 1, userId: 1 };
             prismaMock.quiz.delete.mockResolvedValue({ id: 1 });
 
             await deleteQuiz(req, res);
@@ -74,22 +75,20 @@ describe('quizController', () => {
             expect(res.json).toHaveBeenCalledWith({ message: "Quiz supprimé" });
         });
 
-        it('should return 403 if quiz not found or not owned by user', async () => {
-            req.params.id = '1';
-            prismaMock.quiz.count.mockResolvedValue(0);
+        it('should return 500 if delete fails', async () => {
+            req.quiz = { id: 1, userId: 1 };
+            prismaMock.quiz.delete.mockRejectedValue(new Error('DB error'));
 
             await deleteQuiz(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.json).toHaveBeenCalledWith({ error: "Accès refusé ou quiz introuvable" });
+            expect(res.status).toHaveBeenCalledWith(500);
         });
     });
 
     describe('updateQuiz', () => {
         it('should update a quiz using a transaction', async () => {
-            req.params.id = '1';
+            req.quiz = { id: 1, userId: 1 };
             req.body = { title: 'New Title', questions: [] };
-            prismaMock.quiz.count.mockResolvedValue(1);
             prismaMock.$transaction.mockResolvedValue([]);
 
             await updateQuiz(req, res);
@@ -113,9 +112,8 @@ describe('quizController', () => {
 
     describe('togglePublic', () => {
         it('should toggle isPublic status', async () => {
-            req.params.id = '1';
-            prismaMock.quiz.findUnique.mockResolvedValue({ id: 1, userId: 1, isPublic: false });
-            prismaMock.quiz.update.mockResolvedValue({ isPublic: true });
+            req.quiz = { id: 1, userId: 1, isPublic: false };
+            prismaMock.quiz.update.mockResolvedValue({ isPublic: true, publicId: 'uuid-abc' });
 
             await togglePublic(req, res);
 

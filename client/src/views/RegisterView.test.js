@@ -5,21 +5,25 @@ import { useRouter } from 'vue-router'
 
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(),
-  RouterLink: {
-    template: '<a><slot /></a>'
-  }
+  RouterLink: { template: '<a><slot /></a>' }
+}))
+
+vi.mock('vue-toastification', () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn() })
+}))
+
+vi.mock('@/composables/useAuth', () => ({
+  useAuth: () => ({
+    register: vi.fn().mockResolvedValue(undefined)
+  })
 }))
 
 describe('RegisterView.vue', () => {
   let pushMock
-  
+
   beforeEach(() => {
     pushMock = vi.fn()
     useRouter.mockReturnValue({ push: pushMock })
-    global.fetch = vi.fn()
-    global.localStorage = {
-      setItem: vi.fn()
-    }
   })
 
   it('renders correctly', () => {
@@ -27,25 +31,16 @@ describe('RegisterView.vue', () => {
     expect(wrapper.find('h2').text()).toBe('Créer un compte')
   })
 
-  it('submits registration successfully', async () => {
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ token: 'fake-token', username: 'testuser' })
-    })
-
+  it('submits registration and redirects to /login', async () => {
     const wrapper = mount(RegisterView)
     await wrapper.find('input[placeholder="Ton pseudo"]').setValue('testuser')
     await wrapper.find('input[placeholder="exemple@email.com"]').setValue('test@test.com')
     await wrapper.find('input[placeholder="********"]').setValue('Password123')
-    
-    // Mock window.alert
-    global.alert = vi.fn()
 
     await wrapper.find('form').trigger('submit')
-    
+
     await vi.waitFor(() => {
-        expect(pushMock).toHaveBeenCalledWith('/dashboard')
+      expect(pushMock).toHaveBeenCalledWith('/login')
     })
-    expect(localStorage.setItem).toHaveBeenCalledWith('token', 'fake-token')
   })
 })

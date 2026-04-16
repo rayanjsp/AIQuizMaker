@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useToast } from 'vue-toastification';
 import { useQuizStore } from '@/stores/quizStore';
 import { useApi } from '@/composables/useApi';
@@ -15,6 +15,34 @@ const { authFetch } = useApi();
 const editingQuiz = ref(JSON.parse(JSON.stringify(props.quiz)));
 const aiLoading = ref(false);
 const isSaving = ref(false);
+
+// --- DÉDOUBLONNAGE FRONTEND ---
+function normalizeText(text) {
+  return (text || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const duplicateIndexes = computed(() => {
+  const seen = new Map();
+  const duplicates = new Set();
+  editingQuiz.value.questions.forEach((q, i) => {
+    const norm = normalizeText(q.text);
+    if (norm.length < 3) return;
+    if (seen.has(norm)) {
+      duplicates.add(i);
+      duplicates.add(seen.get(norm));
+    } else {
+      seen.set(norm, i);
+    }
+  });
+  return duplicates;
+});
+
+const hasDuplicates = computed(() => duplicateIndexes.value.size > 0);
 
 const addQuestion = () => {
   editingQuiz.value.questions.push({
@@ -102,7 +130,7 @@ const saveQuiz = async () => {
         <h3 class="text-xl font-bold text-gray-800">Éditeur de Quiz</h3>
         <div class="flex gap-2">
           <button @click="emit('close')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Annuler</button>
-          <button @click="saveQuiz" :disabled="isSaving" class="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg disabled:opacity-50">
+          <button @click="saveQuiz" :disabled="isSaving || hasDuplicates" :title="hasDuplicates ? 'Corrigez les questions en doublon avant de sauvegarder' : ''" class="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-lg disabled:opacity-50">
             {{ isSaving ? 'Sauvegarde...' : '💾 Sauvegarder tout' }}
           </button>
         </div>
@@ -124,7 +152,8 @@ const saveQuiz = async () => {
                 🤖 Générer avec IA
               </button>
             </label>
-            <textarea v-model="question.text" rows="2" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Écrivez votre question ici..."></textarea>
+            <textarea v-model="question.text" rows="2" class="w-full p-3 border rounded-lg focus:ring-2 outline-none" :class="duplicateIndexes.has(qIndex) ? 'border-red-500 focus:ring-red-400' : 'border-gray-300 focus:ring-blue-500'" placeholder="Écrivez votre question ici..."></textarea>
+            <p v-if="duplicateIndexes.has(qIndex)" class="text-red-500 text-xs mt-1 font-medium">Question en doublon — modifiez-la avant de sauvegarder.</p>
           </div>
 
           <div class="space-y-3">
